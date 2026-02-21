@@ -1,0 +1,1519 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAX Data Model — ERD</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
+  background: #f0f1f4;
+  color: #1a1d26;
+  line-height: 1.5;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+/* ── Top Bar ── */
+.top-bar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 28px;
+  background: #ffffff;
+  border-bottom: 1px solid #dcdfe6;
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  z-index: 200;
+  height: 52px;
+}
+.top-bar a.back {
+  color: #2b7de9;
+  text-decoration: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.top-bar a.back:hover { text-decoration: underline; }
+.top-bar h1 {
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1d26;
+}
+.top-bar .links {
+  margin-left: auto;
+  display: flex;
+  gap: 16px;
+}
+.top-bar .links a {
+  color: #2b7de9;
+  text-decoration: none;
+  font-size: 13px;
+}
+.top-bar .links a:hover { text-decoration: underline; }
+
+/* ── Controls Bar ── */
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 28px;
+  background: #f7f8fa;
+  border-bottom: 1px solid #dcdfe6;
+  position: fixed;
+  top: 52px; left: 0; right: 0;
+  z-index: 190;
+  height: 48px;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+}
+
+.filter-group {
+  display: flex;
+  gap: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #c4c8d4;
+  flex-shrink: 0;
+}
+.filter-btn {
+  padding: 5px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  border: none;
+  cursor: pointer;
+  background: #ffffff;
+  color: #5a5f70;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.filter-btn:hover { background: #eef0f4; color: #1a1d26; }
+.filter-btn.active { background: #2b7de9; color: #fff; }
+.filter-btn.active.input-admin { background: #2b7de9; }
+.filter-btn.active.input-inspector { background: #e07020; }
+.filter-btn.active.input-ai { background: #7c3aed; }
+.filter-btn.active.input-system { background: #1a9e50; }
+.filter-btn.active.input-external { background: #6b7080; }
+
+.search-box {
+  margin-left: auto;
+  padding: 6px 12px;
+  background: #ffffff;
+  border: 1px solid #c4c8d4;
+  border-radius: 6px;
+  color: #1a1d26;
+  font-size: 13px;
+  width: 200px;
+  outline: none;
+  flex-shrink: 0;
+}
+.search-box::placeholder { color: #8b90a0; }
+.search-box:focus { border-color: #2b7de9; }
+
+.zoom-controls {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.zoom-btn {
+  width: 30px; height: 30px;
+  border: 1px solid #c4c8d4;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #5a5f70;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+.zoom-btn:hover { background: #eef0f4; color: #1a1d26; }
+.zoom-pct {
+  font-size: 11px;
+  color: #5a5f70;
+  align-self: center;
+  min-width: 36px;
+  text-align: center;
+}
+
+/* ── Canvas ── */
+.canvas-wrap {
+  position: fixed;
+  top: 100px; left: 0; right: 0; bottom: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+.canvas-wrap.grabbing { cursor: grabbing; }
+
+.canvas {
+  position: absolute;
+  top: 0; left: 0;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+/* ── SVG Lines Layer ── */
+.lines-layer {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+.lines-layer path {
+  fill: none;
+  stroke-width: 1.5;
+  transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
+}
+.lines-layer path.fk-line { stroke: #b0b8c8; opacity: 0.6; }
+.lines-layer path.fk-line.highlighted { stroke: #2b7de9; stroke-width: 2.5; opacity: 1; }
+.lines-layer path.fk-line.dimmed { opacity: 0.15; }
+
+/* Crow's foot markers */
+.lines-layer marker path { fill: #b0b8c8; }
+.lines-layer marker path.highlighted { fill: #2b7de9; }
+
+/* ── Domain Groups ── */
+.domain-group {
+  position: absolute;
+  border: 1px solid #dcdfe6;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.5);
+  padding: 40px 16px 16px;
+  transition: opacity 0.3s;
+}
+.domain-group.dimmed { opacity: 0.25; }
+.domain-group-label {
+  position: absolute;
+  top: 10px; left: 16px;
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: #8b90a0;
+}
+
+/* Group accent colors */
+.domain-group[data-group="org"] { border-color: #2b7de940; background: rgba(43, 125, 233, 0.04); }
+.domain-group[data-group="org"] .domain-group-label { color: #2b7de9; }
+.domain-group[data-group="forms"] { border-color: #2b7de940; background: rgba(43, 125, 233, 0.04); }
+.domain-group[data-group="forms"] .domain-group-label { color: #2b7de9; }
+.domain-group[data-group="inspection"] { border-color: #e0702040; background: rgba(224, 112, 32, 0.04); }
+.domain-group[data-group="inspection"] .domain-group-label { color: #c06018; }
+.domain-group[data-group="ai"] { border-color: #7c3aed40; background: rgba(124, 58, 237, 0.04); }
+.domain-group[data-group="ai"] .domain-group-label { color: #7c3aed; }
+.domain-group[data-group="delivery"] { border-color: #1a9e5040; background: rgba(26, 158, 80, 0.04); }
+.domain-group[data-group="delivery"] .domain-group-label { color: #1a9e50; }
+.domain-group[data-group="intelligence"] { border-color: #7c3aed40; background: rgba(124, 58, 237, 0.04); }
+.domain-group[data-group="intelligence"] .domain-group-label { color: #7c3aed; }
+
+/* ── Table Cards ── */
+.table-card {
+  position: absolute;
+  width: 240px;
+  background: #ffffff;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  font-size: 12px;
+  z-index: 10;
+  transition: border-color 0.2s, box-shadow 0.2s, opacity 0.3s;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+.table-card:hover { border-color: #b0b8c8; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+.table-card.highlighted { border-color: #2b7de9; box-shadow: 0 0 16px rgba(43, 125, 233, 0.2); }
+.table-card.dimmed { opacity: 0.2; }
+.table-card.search-match { border-color: #d4a843; box-shadow: 0 0 12px rgba(212, 168, 67, 0.25); }
+.table-card.expanded { z-index: 50; }
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  background: #f7f8fa;
+  border-bottom: 1px solid #dcdfe6;
+  cursor: pointer;
+}
+.card-icon { font-size: 14px; flex-shrink: 0; }
+.card-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1a1d26;
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.input-badge {
+  font-size: 9px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  flex-shrink: 0;
+}
+.input-badge.admin { background: #e8f0fc; color: #2060c0; }
+.input-badge.inspector { background: #fdf0e6; color: #c05a10; }
+.input-badge.ai { background: #f0e8fd; color: #6030c0; }
+.input-badge.system { background: #e6f7ee; color: #148040; }
+.input-badge.external { background: #eef0f4; color: #5a5f70; }
+
+.card-fields {
+  padding: 4px 0;
+  max-height: 200px;
+  overflow-y: auto;
+}
+.field-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.field-row:hover { background: rgba(0,0,0,0.03); }
+.field-icon {
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+.field-icon.pk { color: #b8920a; }
+.field-icon.fk { color: #2b7de9; }
+.field-name {
+  flex: 1;
+  color: #2a2f3a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.field-name.fk-field { color: #2060c0; }
+.field-type {
+  color: #8b90a0;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+
+.card-footer {
+  padding: 5px 10px;
+  border-top: 1px solid #dcdfe6;
+  font-size: 10px;
+  color: #8b90a0;
+  display: flex;
+  justify-content: space-between;
+}
+
+/* ── Expanded Detail ── */
+.card-detail {
+  display: none;
+  padding: 8px 10px;
+  border-top: 1px solid #dcdfe6;
+  font-size: 11px;
+  color: #5a5f70;
+  background: #f7f8fa;
+}
+.table-card.expanded .card-detail { display: block; }
+.detail-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b90a0;
+  margin-top: 6px;
+}
+.detail-label:first-child { margin-top: 0; }
+.detail-nodes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+.detail-node-tag {
+  font-size: 10px;
+  padding: 1px 6px;
+  background: #eef0f4;
+  border: 1px solid #dcdfe6;
+  border-radius: 3px;
+  color: #5a5f70;
+}
+
+/* ── Legend ── */
+.legend {
+  position: fixed;
+  bottom: 16px; left: 16px;
+  background: #ffffff;
+  border: 1px solid #dcdfe6;
+  border-radius: 8px;
+  padding: 12px 16px;
+  z-index: 180;
+  font-size: 11px;
+  max-width: 280px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.legend-title {
+  font-weight: 600;
+  color: #1a1d26;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+.legend-section {
+  margin-bottom: 8px;
+}
+.legend-section-title {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #8b90a0;
+  margin-bottom: 4px;
+}
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 1px 0;
+  color: #5a5f70;
+}
+.legend-swatch {
+  width: 12px; height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+.legend-line {
+  width: 24px;
+  height: 2px;
+  flex-shrink: 0;
+  border-radius: 1px;
+}
+.legend-crow {
+  width: 24px;
+  height: 12px;
+  flex-shrink: 0;
+}
+.legend-toggle {
+  position: absolute;
+  top: 12px; right: 12px;
+  background: none;
+  border: none;
+  color: #8b90a0;
+  cursor: pointer;
+  font-size: 14px;
+}
+.legend.collapsed .legend-section { display: none; }
+.legend.collapsed .legend-title { margin-bottom: 0; }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="top-bar">
+  <a class="back" href="index.html">← Board</a>
+  <h1>Data Model — Entity Relationship Diagram</h1>
+  <div class="links">
+    <a href="index.html">Architecture Board</a>
+  </div>
+</div>
+
+<!-- Controls -->
+<div class="controls">
+  <div class="filter-group" id="domainFilters">
+    <button class="filter-btn active" data-domain="all">All Domains</button>
+    <button class="filter-btn" data-domain="org">Org &amp; Auth</button>
+    <button class="filter-btn" data-domain="forms">Forms</button>
+    <button class="filter-btn" data-domain="inspection">Inspection</button>
+    <button class="filter-btn" data-domain="ai">AI Processing</button>
+    <button class="filter-btn" data-domain="delivery">Delivery</button>
+    <button class="filter-btn" data-domain="intelligence">Intelligence</button>
+  </div>
+  <div class="filter-group" id="inputFilters">
+    <button class="filter-btn active" data-input="all">All Sources</button>
+    <button class="filter-btn input-admin" data-input="admin">Admin</button>
+    <button class="filter-btn input-inspector" data-input="inspector">Inspector</button>
+    <button class="filter-btn input-ai" data-input="ai">AI</button>
+    <button class="filter-btn input-system" data-input="system">System</button>
+    <button class="filter-btn input-external" data-input="external">External</button>
+  </div>
+  <input type="text" class="search-box" id="searchBox" placeholder="Search entity or field…">
+  <div class="zoom-controls">
+    <button class="zoom-btn" id="zoomOut">−</button>
+    <span class="zoom-pct" id="zoomPct">100%</span>
+    <button class="zoom-btn" id="zoomIn">+</button>
+    <button class="zoom-btn" id="zoomFit" title="Fit all">◉</button>
+  </div>
+</div>
+
+<!-- Canvas -->
+<div class="canvas-wrap" id="canvasWrap">
+  <div class="canvas" id="canvas">
+    <svg class="lines-layer" id="linesLayer">
+      <defs>
+        <!-- One-side marker (dot for "one") -->
+        <marker id="marker-one" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+          <circle cx="4" cy="4" r="2.5" fill="#b0b8c8"/>
+        </marker>
+        <!-- Many-side marker (crow's foot) -->
+        <marker id="marker-many" markerWidth="12" markerHeight="12" refX="0" refY="6" orient="auto">
+          <path d="M0,6 L10,1 M0,6 L10,6 M0,6 L10,11" stroke="#b0b8c8" stroke-width="1.5" fill="none"/>
+        </marker>
+        <!-- Highlighted variants -->
+        <marker id="marker-one-hl" markerWidth="8" markerHeight="8" refX="4" refY="4" orient="auto">
+          <circle cx="4" cy="4" r="2.5" fill="#2b7de9"/>
+        </marker>
+        <marker id="marker-many-hl" markerWidth="12" markerHeight="12" refX="0" refY="6" orient="auto">
+          <path d="M0,6 L10,1 M0,6 L10,6 M0,6 L10,11" stroke="#2b7de9" stroke-width="1.5" fill="none"/>
+        </marker>
+      </defs>
+    </svg>
+  </div>
+</div>
+
+<!-- Legend -->
+<div class="legend" id="legend">
+  <button class="legend-toggle" id="legendToggle">▾</button>
+  <div class="legend-title">Legend</div>
+  <div class="legend-section">
+    <div class="legend-section-title">Input Method (who creates)</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#2b7de9"></span> Admin (dashboard)</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#e07020"></span> Inspector (field)</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#7c3aed"></span> AI (extracted)</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#1a9e50"></span> System (auto)</div>
+    <div class="legend-item"><span class="legend-swatch" style="background:#6b7080"></span> External (3rd party)</div>
+  </div>
+  <div class="legend-section">
+    <div class="legend-section-title">Fields</div>
+    <div class="legend-item"><span style="color:#d4a843;width:14px;text-align:center">🔑</span> Primary Key</div>
+    <div class="legend-item"><span style="color:#5a90d0;width:14px;text-align:center">→</span> Foreign Key</div>
+  </div>
+  <div class="legend-section">
+    <div class="legend-section-title">Relationships</div>
+    <div class="legend-item">
+      <svg class="legend-crow" viewBox="0 0 24 12"><line x1="0" y1="6" x2="14" y2="6" stroke="#2b7de9" stroke-width="1.5"/><circle cx="18" cy="6" r="2.5" fill="#2b7de9"/></svg>
+      One side
+    </div>
+    <div class="legend-item">
+      <svg class="legend-crow" viewBox="0 0 24 12"><path d="M24,6 L14,1 M24,6 L14,6 M24,6 L14,11" stroke="#2b7de9" stroke-width="1.5" fill="none"/></svg>
+      Many side (crow's foot)
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════════
+// SCHEMA DEFINITIONS
+// ════════════════════════════════════════════════════════════
+
+const schema = [
+  // ── Org & Auth ──
+  {
+    name: 'User', group: 'org', icon: '👤', inputMethod: 'admin',
+    createdBy: 'admin_signup',
+    usedBy: ['invite_team', 'inspector_claims', 'gets_app', 'admin_assigns'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'email', type: 'string' },
+      { name: 'name', type: 'string' },
+      { name: 'phone', type: 'string' },
+      { name: 'cognitoSub', type: 'string' },
+    ]
+  },
+  {
+    name: 'Organization', group: 'org', icon: '🏢', inputMethod: 'admin',
+    createdBy: 'create_org',
+    usedBy: ['form_builder', 'setup_properties', 'admin_assigns', 'dashboard', 'branded_pdf'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'name', type: 'string' },
+      { name: 'slug', type: 'string' },
+      { name: 'settings', type: 'JSON' },
+      { name: 'plan', type: 'enum' },
+      { name: 'stripeCustomerId', type: 'string', fk: 'Subscription.stripeId' },
+      { name: 'twilioPhoneNumber', type: 'string' },
+    ]
+  },
+  {
+    name: 'Membership', group: 'org', icon: '🔗', inputMethod: 'admin',
+    createdBy: 'create_org',
+    usedBy: ['invite_team', 'inspector_claims', 'license_code_entry'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'userId', type: 'UUID', fk: 'User.id' },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'role', type: 'enum' },
+      { name: 'status', type: 'enum' },
+      { name: 'joinedAt', type: 'timestamp' },
+    ]
+  },
+  {
+    name: 'Subscription', group: 'org', icon: '💳', inputMethod: 'external',
+    createdBy: 'subscription',
+    usedBy: ['create_org'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'stripeId', type: 'string' },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'plan', type: 'enum' },
+      { name: 'status', type: 'enum' },
+      { name: 'currentPeriod', type: 'JSON' },
+    ]
+  },
+  {
+    name: 'License', group: 'org', icon: '🔑', inputMethod: 'admin',
+    createdBy: 'license_management',
+    usedBy: ['license_code_entry'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'code', type: 'string' },
+      { name: 'maxSeats', type: 'int' },
+      { name: 'usedSeats', type: 'int' },
+      { name: 'expiresAt', type: 'timestamp' },
+    ]
+  },
+  {
+    name: 'Person', group: 'org', icon: '🧑', inputMethod: 'admin',
+    createdBy: 'setup_properties',
+    usedBy: ['admin_assigns', 'email_ses'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'name', type: 'string' },
+      { name: 'email', type: 'string' },
+      { name: 'type', type: 'enum' },
+    ]
+  },
+
+  // ── Forms & Config ──
+  {
+    name: 'Form', group: 'forms', icon: '📋', inputMethod: 'admin',
+    createdBy: 'form_builder',
+    usedBy: ['admin_assigns', 'inspection_begins', 'ai_extraction', 'branded_pdf'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'int' },
+      { name: 'schema', type: 'JSON' },
+    ]
+  },
+  {
+    name: 'FormField', group: 'forms', icon: '📝', inputMethod: 'admin',
+    createdBy: 'form_builder',
+    usedBy: ['ai_extraction', 'field_configuration', 'form_field_values'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'formId', type: 'UUID', fk: 'Form.id' },
+      { name: 'label', type: 'string' },
+      { name: 'type', type: 'enum' },
+      { name: 'options', type: 'JSON' },
+      { name: 'order', type: 'int' },
+      { name: 'required', type: 'boolean' },
+      { name: 'sectionId', type: 'string' },
+    ]
+  },
+  {
+    name: 'FieldConfig', group: 'forms', icon: '⚙️', inputMethod: 'admin',
+    createdBy: 'field_configuration',
+    usedBy: ['ai_extraction', 'confidence_scoring'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'fieldId', type: 'UUID', fk: 'FormField.id' },
+      { name: 'importance', type: 'float' },
+      { name: 'keyTerms', type: 'JSON' },
+      { name: 'validationRules', type: 'JSON' },
+      { name: 'descriptiveText', type: 'string' },
+    ]
+  },
+  {
+    name: 'FormGuidance', group: 'forms', icon: '📖', inputMethod: 'admin',
+    createdBy: 'form_markdown_guidance',
+    usedBy: ['ai_extraction'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'formId', type: 'UUID', fk: 'Form.id' },
+      { name: 'markdownContent', type: 'text' },
+      { name: 'examples', type: 'JSON' },
+      { name: 'fieldMappingHints', type: 'JSON' },
+    ]
+  },
+  {
+    name: 'OutputConfig', group: 'forms', icon: '📤', inputMethod: 'admin',
+    createdBy: 'output_configuration',
+    usedBy: ['branded_pdf', 'external_system_export'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'formId', type: 'UUID', fk: 'Form.id' },
+      { name: 'format', type: 'enum' },
+      { name: 'template', type: 'string' },
+      { name: 'targetSystem', type: 'string' },
+      { name: 'fieldMapping', type: 'JSON' },
+    ]
+  },
+  {
+    name: 'Alias', group: 'forms', icon: '🏷️', inputMethod: 'admin',
+    createdBy: 'vocabulary_aliases',
+    usedBy: ['field_normalization', 'ai_extraction'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'formId', type: 'UUID', fk: 'Form.id', nullable: true },
+      { name: 'canonical', type: 'string' },
+      { name: 'variants', type: 'JSON' },
+    ]
+  },
+
+  // ── Inspection ──
+  {
+    name: 'Property', group: 'inspection', icon: '🏠', inputMethod: 'admin',
+    createdBy: 'setup_properties',
+    usedBy: ['admin_assigns', 'predictive_analytics'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'address', type: 'string' },
+      { name: 'gps', type: 'JSON' },
+      { name: 'clientPersonId', type: 'UUID', fk: 'Person.id' },
+    ]
+  },
+  {
+    name: 'Assignment', group: 'inspection', icon: '📌', inputMethod: 'admin',
+    createdBy: 'admin_assigns',
+    usedBy: ['inspection_begins', 'opens_app', 'ready_inspect'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'userId', type: 'UUID', fk: 'User.id' },
+      { name: 'formId', type: 'UUID', fk: 'Form.id' },
+      { name: 'propertyId', type: 'UUID', fk: 'Property.id' },
+      { name: 'deadline', type: 'timestamp' },
+      { name: 'notes', type: 'text' },
+    ]
+  },
+  {
+    name: 'CallSession', group: 'inspection', icon: '📞', inputMethod: 'inspector',
+    createdBy: 'inspection_begins',
+    usedBy: ['transcription', 'ai_extraction', 'form_field_values', 'inspector_review', 'branded_pdf'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'userId', type: 'UUID', fk: 'User.id' },
+      { name: 'formId', type: 'UUID', fk: 'Form.id' },
+      { name: 'assignmentId', type: 'UUID', fk: 'Assignment.id' },
+      { name: 'status', type: 'enum' },
+      { name: 'twilioCallSid', type: 'string' },
+    ]
+  },
+  {
+    name: 'Photo', group: 'inspection', icon: '📷', inputMethod: 'inspector',
+    createdBy: 'voice_camera_gps',
+    usedBy: ['photo_analysis', 'branded_pdf', 'sms_photos'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'callSessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 's3Key', type: 'string' },
+      { name: 'gpsLat', type: 'float' },
+      { name: 'gpsLng', type: 'float' },
+      { name: 'caption', type: 'string' },
+    ]
+  },
+  {
+    name: 'AudioRecording', group: 'inspection', icon: '🎙️', inputMethod: 'inspector',
+    createdBy: 'voice_camera_gps',
+    usedBy: ['transcription'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'callSessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'localUri', type: 'string' },
+      { name: 'duration', type: 'int' },
+      { name: 's3Key', type: 'string' },
+    ]
+  },
+  {
+    name: 'SessionMeta', group: 'inspection', icon: '📋', inputMethod: 'system',
+    createdBy: 'session_metadata_capture',
+    usedBy: ['branded_pdf', 'predictive_analytics'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'sessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'weather', type: 'JSON' },
+      { name: 'deviceInfo', type: 'JSON' },
+      { name: 'pauseCount', type: 'int' },
+      { name: 'gpsTrack', type: 'JSON' },
+    ]
+  },
+  {
+    name: 'Schedule', group: 'inspection', icon: '📅', inputMethod: 'admin',
+    createdBy: 'scheduler',
+    usedBy: ['admin_assigns'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'formId', type: 'UUID', fk: 'Form.id' },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'frequency', type: 'string' },
+      { name: 'nextRun', type: 'timestamp' },
+    ]
+  },
+
+  // ── AI Processing ──
+  {
+    name: 'Transcript', group: 'ai', icon: '🎙️', inputMethod: 'ai',
+    createdBy: 'transcription',
+    usedBy: ['ai_extraction'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'sessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'text', type: 'text' },
+      { name: 'segments', type: 'JSON' },
+      { name: 'speakers', type: 'JSON' },
+    ]
+  },
+  {
+    name: 'FFV', group: 'ai', icon: '💾', inputMethod: 'ai',
+    createdBy: 'form_field_values',
+    usedBy: ['inspector_review', 'inspector_submit', 'branded_pdf', 'confidence_scoring'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'callSessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'formFieldId', type: 'UUID', fk: 'FormField.id' },
+      { name: 'value', type: 'JSON' },
+      { name: 'confidence', type: 'float' },
+      { name: 'source', type: 'enum' },
+    ]
+  },
+  {
+    name: 'FieldValue', group: 'ai', icon: '📊', inputMethod: 'ai',
+    createdBy: 'ai_extraction',
+    usedBy: ['form_field_values', 'confidence_scoring'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'fieldId', type: 'UUID', fk: 'FormField.id' },
+      { name: 'sessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'value', type: 'JSON' },
+      { name: 'confidence', type: 'float' },
+    ]
+  },
+  {
+    name: 'InspectorCorrection', group: 'ai', icon: '✏️', inputMethod: 'inspector',
+    createdBy: 'ai_learning_pipeline',
+    usedBy: ['ai_learning_pipeline'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'sessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'fieldId', type: 'UUID', fk: 'FormField.id' },
+      { name: 'aiValue', type: 'JSON' },
+      { name: 'correctedValue', type: 'JSON' },
+    ]
+  },
+
+  // ── Delivery ──
+  {
+    name: 'PDF', group: 'delivery', icon: '📄', inputMethod: 'system',
+    createdBy: 'branded_pdf',
+    usedBy: ['email_ses', 'client_portal'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'sessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'template', type: 'string' },
+      { name: 'orgLogo', type: 'string' },
+      { name: 's3Key', type: 'string' },
+    ]
+  },
+  {
+    name: 'ExportJob', group: 'delivery', icon: '🌐', inputMethod: 'system',
+    createdBy: 'external_system_export',
+    usedBy: ['dashboard'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'sessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'targetSystem', type: 'string' },
+      { name: 'format', type: 'enum' },
+      { name: 'status', type: 'enum' },
+    ]
+  },
+  {
+    name: 'Integration', group: 'delivery', icon: '⚙️', inputMethod: 'admin',
+    createdBy: 'integration_settings',
+    usedBy: ['external_system_export', 'client_portal'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'orgId', type: 'UUID', fk: 'Organization.id' },
+      { name: 'provider', type: 'string' },
+      { name: 'config', type: 'JSON' },
+      { name: 'status', type: 'enum' },
+    ]
+  },
+
+  // ── Intelligence ──
+  {
+    name: 'RiskScore', group: 'intelligence', icon: '📊', inputMethod: 'ai',
+    createdBy: 'predictive_analytics',
+    usedBy: ['insights_dashboard'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'propertyId', type: 'UUID', fk: 'Property.id' },
+      { name: 'score', type: 'float' },
+      { name: 'factors', type: 'JSON' },
+      { name: 'calculatedAt', type: 'timestamp' },
+    ]
+  },
+  {
+    name: 'Comment', group: 'intelligence', icon: '💬', inputMethod: 'inspector',
+    createdBy: 'feedback_loop',
+    usedBy: ['dashboard', 'ai_learning_pipeline'],
+    fields: [
+      { name: 'id', type: 'UUID', pk: true },
+      { name: 'callSessionId', type: 'UUID', fk: 'CallSession.id' },
+      { name: 'userId', type: 'UUID', fk: 'User.id' },
+      { name: 'text', type: 'text' },
+      { name: 'createdAt', type: 'timestamp' },
+    ]
+  },
+];
+
+// ════════════════════════════════════════════════════════════
+// FK RELATIONSHIPS (auto-derived + explicit)
+// ════════════════════════════════════════════════════════════
+
+// Build lookup
+const entityMap = {};
+schema.forEach(e => { entityMap[e.name] = e; });
+
+// Derive relationships from FK fields
+const relationships = [];
+schema.forEach(entity => {
+  entity.fields.forEach(field => {
+    if (field.fk) {
+      const [targetEntity, targetField] = field.fk.split('.');
+      if (entityMap[targetEntity]) {
+        relationships.push({
+          from: entity.name,
+          fromField: field.name,
+          to: targetEntity,
+          toField: targetField || 'id',
+          type: '1:N' // target has one, source has many (FK on many side)
+        });
+      }
+    }
+  });
+});
+
+// ════════════════════════════════════════════════════════════
+// LAYOUT CONFIGURATION
+// ════════════════════════════════════════════════════════════
+
+const CARD_W = 240;
+const CARD_GAP = 20;
+const GROUP_PAD = 56; // top padding for label
+const GROUP_PAD_BOTTOM = 20;
+const GROUP_PAD_X = 20;
+const GROUP_GAP_X = 60;
+const GROUP_GAP_Y = 50;
+
+const groupDefs = {
+  org:          { label: 'Org & Auth',     col: 0, row: 0 },
+  forms:        { label: 'Forms & Config', col: 1, row: 0 },
+  inspection:   { label: 'Inspection',     col: 0, row: 1 },
+  ai:           { label: 'AI Processing',  col: 1, row: 1 },
+  delivery:     { label: 'Delivery',       col: 0, row: 2 },
+  intelligence: { label: 'Intelligence',   col: 1, row: 2 },
+};
+
+// ════════════════════════════════════════════════════════════
+// RENDERING
+// ════════════════════════════════════════════════════════════
+
+let scale = 0.85;
+let panX = 40;
+let panY = 20;
+let isPanning = false;
+let panStartX, panStartY;
+let expandedEntity = null;
+let highlightedEntity = null;
+let activeDomain = 'all';
+let activeInput = 'all';
+let searchTerm = '';
+
+const canvas = document.getElementById('canvas');
+const canvasWrap = document.getElementById('canvasWrap');
+const linesLayer = document.getElementById('linesLayer');
+
+function render() {
+  // Clear
+  canvas.querySelectorAll('.domain-group, .table-card').forEach(el => el.remove());
+
+  // Group entities
+  const groups = {};
+  schema.forEach(e => {
+    if (!groups[e.group]) groups[e.group] = [];
+    groups[e.group].push(e);
+  });
+
+  // Layout: compute card positions per group, then group positions
+  const groupBounds = {};
+  const cardPositions = {};
+
+  Object.keys(groupDefs).forEach(gKey => {
+    const entities = groups[gKey] || [];
+    const cols = gKey === 'org' || gKey === 'inspection' ? 3 : (entities.length <= 3 ? entities.length : 3);
+    const rows = Math.ceil(entities.length / cols);
+
+    const fieldCounts = entities.map(e => e.fields.length);
+    // Card height based on field count
+    function cardHeight(entity) {
+      const fieldH = entity.fields.length * 22;
+      const base = 40 + fieldH + 28; // header + fields + footer
+      return Math.max(base, 130);
+    }
+
+    // Find max height per layout row
+    const rowHeights = [];
+    for (let r = 0; r < rows; r++) {
+      let maxH = 0;
+      for (let c = 0; c < cols; c++) {
+        const idx = r * cols + c;
+        if (idx < entities.length) {
+          maxH = Math.max(maxH, cardHeight(entities[idx]));
+        }
+      }
+      rowHeights.push(maxH);
+    }
+
+    let groupW = cols * CARD_W + (cols - 1) * CARD_GAP + GROUP_PAD_X * 2;
+    let groupH = GROUP_PAD + rowHeights.reduce((a, b) => a + b, 0) + (rows - 1) * CARD_GAP + GROUP_PAD_BOTTOM;
+
+    entities.forEach((entity, idx) => {
+      const r = Math.floor(idx / cols);
+      const c = idx % cols;
+      let y = GROUP_PAD;
+      for (let ri = 0; ri < r; ri++) y += rowHeights[ri] + CARD_GAP;
+      cardPositions[entity.name] = {
+        localX: GROUP_PAD_X + c * (CARD_W + CARD_GAP),
+        localY: y,
+        w: CARD_W,
+        h: cardHeight(entity),
+      };
+    });
+
+    groupBounds[gKey] = { w: groupW, h: groupH };
+  });
+
+  // Position groups in 2-column layout
+  const groupPositions = {};
+  const colWidths = [0, 0];
+  const rowHeightsG = [0, 0, 0];
+
+  Object.keys(groupDefs).forEach(gKey => {
+    const def = groupDefs[gKey];
+    colWidths[def.col] = Math.max(colWidths[def.col], groupBounds[gKey].w);
+    rowHeightsG[def.row] = Math.max(rowHeightsG[def.row], groupBounds[gKey].h);
+  });
+
+  Object.keys(groupDefs).forEach(gKey => {
+    const def = groupDefs[gKey];
+    let x = 0;
+    for (let c = 0; c < def.col; c++) x += colWidths[c] + GROUP_GAP_X;
+    let y = 0;
+    for (let r = 0; r < def.row; r++) y += rowHeightsG[r] + GROUP_GAP_Y;
+    groupPositions[gKey] = { x, y, w: colWidths[def.col], h: rowHeightsG[def.row] };
+  });
+
+  // Total canvas size
+  const totalW = colWidths.reduce((a, b) => a + b, 0) + GROUP_GAP_X + 100;
+  const totalH = rowHeightsG.reduce((a, b) => a + b, 0) + GROUP_GAP_Y * 2 + 100;
+
+  // Render groups
+  Object.keys(groupDefs).forEach(gKey => {
+    const gp = groupPositions[gKey];
+    const div = document.createElement('div');
+    div.className = 'domain-group';
+    div.dataset.group = gKey;
+    div.style.left = gp.x + 'px';
+    div.style.top = gp.y + 'px';
+    div.style.width = gp.w + 'px';
+    div.style.height = gp.h + 'px';
+    div.innerHTML = `<div class="domain-group-label">${groupDefs[gKey].label}</div>`;
+    canvas.appendChild(div);
+  });
+
+  // Render cards
+  schema.forEach(entity => {
+    const gp = groupPositions[entity.group];
+    const cp = cardPositions[entity.name];
+    const absX = gp.x + cp.localX;
+    const absY = gp.y + cp.localY;
+
+    // Store absolute position for line drawing
+    cp.absX = absX;
+    cp.absY = absY;
+
+    const card = document.createElement('div');
+    card.className = 'table-card';
+    card.dataset.entity = entity.name;
+    card.dataset.group = entity.group;
+    card.dataset.input = entity.inputMethod;
+    card.style.left = absX + 'px';
+    card.style.top = absY + 'px';
+    card.style.width = CARD_W + 'px';
+
+    const inputLabels = { admin: 'Admin', inspector: 'Inspector', ai: 'AI', system: 'System', external: 'External' };
+
+    // Header
+    let html = `<div class="card-header" data-entity="${entity.name}">
+      <span class="card-icon">${entity.icon}</span>
+      <span class="card-title">${entity.name}</span>
+      <span class="input-badge ${entity.inputMethod}">${inputLabels[entity.inputMethod]}</span>
+    </div>`;
+
+    // Fields
+    html += '<div class="card-fields">';
+    entity.fields.forEach(f => {
+      const isPK = f.pk;
+      const isFK = !!f.fk;
+      const iconClass = isPK ? 'pk' : (isFK ? 'fk' : '');
+      const iconText = isPK ? '🔑' : (isFK ? '→' : '');
+      const nameClass = isFK ? 'fk-field' : '';
+      html += `<div class="field-row" data-field="${f.name}" ${isFK ? 'data-fk="' + f.fk + '"' : ''}>
+        <span class="field-icon ${iconClass}">${iconText}</span>
+        <span class="field-name ${nameClass}">${f.name}</span>
+        <span class="field-type">${f.type}</span>
+      </div>`;
+    });
+    html += '</div>';
+
+    // Footer
+    const usedByCount = entity.usedBy ? entity.usedBy.length : 0;
+    html += `<div class="card-footer">
+      <span>Used by: ${usedByCount} nodes</span>
+      <span>${entity.fields.length} fields</span>
+    </div>`;
+
+    // Detail (expanded)
+    html += '<div class="card-detail">';
+    html += '<div class="detail-label">Created by</div>';
+    html += `<div class="detail-nodes"><span class="detail-node-tag">${entity.createdBy}</span></div>`;
+    if (entity.usedBy && entity.usedBy.length > 0) {
+      html += '<div class="detail-label">Used by</div>';
+      html += '<div class="detail-nodes">' + entity.usedBy.map(n => `<span class="detail-node-tag">${n}</span>`).join('') + '</div>';
+    }
+    // Show FK references
+    const fkFields = entity.fields.filter(f => f.fk);
+    if (fkFields.length > 0) {
+      html += '<div class="detail-label">References</div>';
+      html += '<div class="detail-nodes">' + fkFields.map(f => `<span class="detail-node-tag">${f.name} → ${f.fk}</span>`).join('') + '</div>';
+    }
+    // Show entities that reference this one
+    const referencedBy = relationships.filter(r => r.to === entity.name);
+    if (referencedBy.length > 0) {
+      html += '<div class="detail-label">Referenced by</div>';
+      html += '<div class="detail-nodes">' + referencedBy.map(r => `<span class="detail-node-tag">${r.from}.${r.fromField}</span>`).join('') + '</div>';
+    }
+    html += '</div>';
+
+    card.innerHTML = html;
+    canvas.appendChild(card);
+  });
+
+  // Size SVG
+  linesLayer.setAttribute('width', totalW);
+  linesLayer.setAttribute('height', totalH);
+  linesLayer.style.width = totalW + 'px';
+  linesLayer.style.height = totalH + 'px';
+
+  drawLines();
+  applyFilters();
+  applyTransform();
+}
+
+// ════════════════════════════════════════════════════════════
+// SVG CONNECTION LINES
+// ════════════════════════════════════════════════════════════
+
+function drawLines() {
+  // Remove old lines
+  linesLayer.querySelectorAll('path.fk-line').forEach(p => p.remove());
+
+  relationships.forEach(rel => {
+    const fromPos = cardPositions[rel.from];
+    const toPos = cardPositions[rel.to];
+    if (!fromPos || !toPos) return;
+
+    // Find field index for precise Y positioning
+    const fromEntity = entityMap[rel.from];
+    const fromFieldIdx = fromEntity.fields.findIndex(f => f.name === rel.fromField);
+    const toEntity = entityMap[rel.to];
+    const toFieldIdx = toEntity.fields.findIndex(f => f.name === rel.toField);
+
+    // Compute connection points
+    const fromFieldY = fromPos.absY + 40 + (fromFieldIdx >= 0 ? fromFieldIdx : 0) * 22 + 11;
+    const toFieldY = toPos.absY + 40 + (toFieldIdx >= 0 ? toFieldIdx : 0) * 22 + 11;
+
+    let fromX, toX;
+    const fromCenterX = fromPos.absX + CARD_W / 2;
+    const toCenterX = toPos.absX + CARD_W / 2;
+
+    // Determine which sides to connect from
+    if (fromPos.absX + CARD_W < toPos.absX) {
+      // From is left of To
+      fromX = fromPos.absX + CARD_W;
+      toX = toPos.absX;
+    } else if (toPos.absX + CARD_W < fromPos.absX) {
+      // To is left of From
+      fromX = fromPos.absX;
+      toX = toPos.absX + CARD_W;
+    } else {
+      // Overlapping horizontally — go right from both
+      fromX = fromPos.absX + CARD_W;
+      toX = toPos.absX + CARD_W;
+    }
+
+    // Manhattan routing (right-angle path)
+    const midX = (fromX + toX) / 2;
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+
+    let d;
+    if (fromX === fromPos.absX + CARD_W && toX === toPos.absX) {
+      // Left-to-right
+      d = `M${fromX},${fromFieldY} H${midX} V${toFieldY} H${toX}`;
+    } else if (fromX === fromPos.absX && toX === toPos.absX + CARD_W) {
+      // Right-to-left
+      d = `M${fromX},${fromFieldY} H${midX} V${toFieldY} H${toX}`;
+    } else {
+      // Same side — route with offset
+      const offset = 30;
+      const maxX = Math.max(fromX, toX) + offset;
+      d = `M${fromX},${fromFieldY} H${maxX} V${toFieldY} H${toX}`;
+    }
+
+    path.setAttribute('d', d);
+    path.classList.add('fk-line');
+    path.dataset.from = rel.from;
+    path.dataset.to = rel.to;
+    path.setAttribute('marker-start', 'url(#marker-many)');
+    path.setAttribute('marker-end', 'url(#marker-one)');
+
+    linesLayer.appendChild(path);
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// INTERACTIVITY
+// ════════════════════════════════════════════════════════════
+
+// Hover: highlight connections
+canvas.addEventListener('mouseover', (e) => {
+  const card = e.target.closest('.table-card');
+  if (!card) {
+    clearHighlight();
+    return;
+  }
+  highlightEntity(card.dataset.entity);
+});
+
+canvas.addEventListener('mouseout', (e) => {
+  const card = e.target.closest('.table-card');
+  if (card && !card.contains(e.relatedTarget)) {
+    // Only clear if not moving to another card
+    if (!e.relatedTarget || !e.relatedTarget.closest('.table-card')) {
+      clearHighlight();
+    }
+  }
+});
+
+function highlightEntity(name) {
+  if (highlightedEntity === name) return;
+  highlightedEntity = name;
+
+  // Find all connected entities
+  const connected = new Set([name]);
+  relationships.forEach(rel => {
+    if (rel.from === name) connected.add(rel.to);
+    if (rel.to === name) connected.add(rel.from);
+  });
+
+  // Highlight cards
+  canvas.querySelectorAll('.table-card').forEach(card => {
+    if (connected.has(card.dataset.entity)) {
+      card.classList.add('highlighted');
+      card.classList.remove('dimmed');
+    } else {
+      card.classList.remove('highlighted');
+      card.classList.add('dimmed');
+    }
+  });
+
+  // Highlight groups
+  const connectedGroups = new Set();
+  connected.forEach(eName => {
+    const e = entityMap[eName];
+    if (e) connectedGroups.add(e.group);
+  });
+  canvas.querySelectorAll('.domain-group').forEach(g => {
+    if (connectedGroups.has(g.dataset.group)) {
+      g.classList.remove('dimmed');
+    } else {
+      g.classList.add('dimmed');
+    }
+  });
+
+  // Highlight lines
+  linesLayer.querySelectorAll('path.fk-line').forEach(p => {
+    if (p.dataset.from === name || p.dataset.to === name) {
+      p.classList.add('highlighted');
+      p.classList.remove('dimmed');
+      p.setAttribute('marker-start', 'url(#marker-many-hl)');
+      p.setAttribute('marker-end', 'url(#marker-one-hl)');
+    } else {
+      p.classList.remove('highlighted');
+      p.classList.add('dimmed');
+      p.setAttribute('marker-start', 'url(#marker-many)');
+      p.setAttribute('marker-end', 'url(#marker-one)');
+    }
+  });
+}
+
+function clearHighlight() {
+  highlightedEntity = null;
+  canvas.querySelectorAll('.table-card').forEach(card => {
+    card.classList.remove('highlighted', 'dimmed');
+  });
+  canvas.querySelectorAll('.domain-group').forEach(g => {
+    g.classList.remove('dimmed');
+  });
+  linesLayer.querySelectorAll('path.fk-line').forEach(p => {
+    p.classList.remove('highlighted', 'dimmed');
+    p.setAttribute('marker-start', 'url(#marker-many)');
+    p.setAttribute('marker-end', 'url(#marker-one)');
+  });
+}
+
+// Click: expand/collapse
+canvas.addEventListener('click', (e) => {
+  const header = e.target.closest('.card-header');
+  if (!header) return;
+  const entityName = header.dataset.entity;
+  const card = header.closest('.table-card');
+
+  if (expandedEntity === entityName) {
+    expandedEntity = null;
+    card.classList.remove('expanded');
+  } else {
+    // Collapse previous
+    if (expandedEntity) {
+      const prev = canvas.querySelector(`.table-card[data-entity="${expandedEntity}"]`);
+      if (prev) prev.classList.remove('expanded');
+    }
+    expandedEntity = entityName;
+    card.classList.add('expanded');
+  }
+});
+
+// ════════════════════════════════════════════════════════════
+// FILTERS
+// ════════════════════════════════════════════════════════════
+
+document.getElementById('domainFilters').addEventListener('click', (e) => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('#domainFilters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeDomain = btn.dataset.domain;
+  applyFilters();
+});
+
+document.getElementById('inputFilters').addEventListener('click', (e) => {
+  const btn = e.target.closest('.filter-btn');
+  if (!btn) return;
+  document.querySelectorAll('#inputFilters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  activeInput = btn.dataset.input;
+  applyFilters();
+});
+
+document.getElementById('searchBox').addEventListener('input', (e) => {
+  searchTerm = e.target.value.toLowerCase().trim();
+  applyFilters();
+});
+
+function applyFilters() {
+  const cards = canvas.querySelectorAll('.table-card');
+  const groups = canvas.querySelectorAll('.domain-group');
+  const visibleEntities = new Set();
+
+  cards.forEach(card => {
+    const entityName = card.dataset.entity;
+    const entity = entityMap[entityName];
+    let visible = true;
+
+    // Domain filter
+    if (activeDomain !== 'all' && card.dataset.group !== activeDomain) visible = false;
+    // Input method filter
+    if (activeInput !== 'all' && card.dataset.input !== activeInput) visible = false;
+
+    card.style.display = visible ? '' : 'none';
+    if (visible) visibleEntities.add(entityName);
+
+    // Search highlight
+    card.classList.remove('search-match');
+    if (searchTerm && visible) {
+      const nameMatch = entityName.toLowerCase().includes(searchTerm);
+      const fieldMatch = entity.fields.some(f => f.name.toLowerCase().includes(searchTerm));
+      if (nameMatch || fieldMatch) {
+        card.classList.add('search-match');
+      }
+    }
+  });
+
+  // Show/hide groups
+  groups.forEach(g => {
+    const groupKey = g.dataset.group;
+    if (activeDomain !== 'all' && groupKey !== activeDomain) {
+      g.style.display = 'none';
+    } else {
+      // Check if any card in this group matches input filter
+      const hasVisible = schema.some(e => e.group === groupKey && visibleEntities.has(e.name));
+      g.style.display = hasVisible ? '' : 'none';
+    }
+  });
+
+  // Show/hide lines
+  linesLayer.querySelectorAll('path.fk-line').forEach(p => {
+    const fromVis = visibleEntities.has(p.dataset.from);
+    const toVis = visibleEntities.has(p.dataset.to);
+    p.style.display = (fromVis && toVis) ? '' : 'none';
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+// ZOOM & PAN
+// ════════════════════════════════════════════════════════════
+
+function applyTransform() {
+  canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+  document.getElementById('zoomPct').textContent = Math.round(scale * 100) + '%';
+}
+
+function zoomIn() {
+  scale = Math.min(3.0, scale * 1.15);
+  applyTransform();
+}
+
+function zoomOut() {
+  scale = Math.max(0.15, scale / 1.15);
+  applyTransform();
+}
+
+function fitAll() {
+  const wrap = canvasWrap.getBoundingClientRect();
+  // Find bounding box of all groups
+  let maxX = 0, maxY = 0;
+  canvas.querySelectorAll('.domain-group').forEach(g => {
+    if (g.style.display === 'none') return;
+    const x = parseFloat(g.style.left) + parseFloat(g.style.width);
+    const y = parseFloat(g.style.top) + parseFloat(g.style.height);
+    maxX = Math.max(maxX, x);
+    maxY = Math.max(maxY, y);
+  });
+  if (maxX === 0 || maxY === 0) return;
+
+  const padX = 60, padY = 40;
+  const scaleX = (wrap.width - padX * 2) / maxX;
+  const scaleY = (wrap.height - padY * 2) / maxY;
+  scale = Math.min(scaleX, scaleY, 1.5);
+  panX = (wrap.width - maxX * scale) / 2;
+  panY = (wrap.height - maxY * scale) / 2;
+  applyTransform();
+}
+
+document.getElementById('zoomIn').addEventListener('click', zoomIn);
+document.getElementById('zoomOut').addEventListener('click', zoomOut);
+document.getElementById('zoomFit').addEventListener('click', fitAll);
+
+// Mouse wheel zoom
+canvasWrap.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const rect = canvasWrap.getBoundingClientRect();
+  const mx = e.clientX - rect.left;
+  const my = e.clientY - rect.top;
+  const prevScale = scale;
+
+  if (e.deltaY < 0) {
+    scale = Math.min(3.0, scale * 1.08);
+  } else {
+    scale = Math.max(0.15, scale / 1.08);
+  }
+
+  // Zoom toward cursor
+  panX = mx - (mx - panX) * (scale / prevScale);
+  panY = my - (my - panY) * (scale / prevScale);
+  applyTransform();
+}, { passive: false });
+
+// Pan with mouse drag
+canvasWrap.addEventListener('mousedown', (e) => {
+  if (e.target.closest('.table-card')) return;
+  isPanning = true;
+  panStartX = e.clientX - panX;
+  panStartY = e.clientY - panY;
+  canvasWrap.classList.add('grabbing');
+});
+
+window.addEventListener('mousemove', (e) => {
+  if (!isPanning) return;
+  panX = e.clientX - panStartX;
+  panY = e.clientY - panStartY;
+  applyTransform();
+});
+
+window.addEventListener('mouseup', () => {
+  isPanning = false;
+  canvasWrap.classList.remove('grabbing');
+});
+
+// Keyboard shortcuts
+window.addEventListener('keydown', (e) => {
+  if (e.target.tagName === 'INPUT') return;
+  if (e.key === '=' || e.key === '+') zoomIn();
+  if (e.key === '-') zoomOut();
+  if (e.key === 'f') fitAll();
+  if (e.key === '/') {
+    e.preventDefault();
+    document.getElementById('searchBox').focus();
+  }
+  if (e.key === 'Escape') {
+    document.getElementById('searchBox').blur();
+    document.getElementById('searchBox').value = '';
+    searchTerm = '';
+    applyFilters();
+    // Collapse expanded
+    if (expandedEntity) {
+      const card = canvas.querySelector(`.table-card[data-entity="${expandedEntity}"]`);
+      if (card) card.classList.remove('expanded');
+      expandedEntity = null;
+    }
+    clearHighlight();
+  }
+});
+
+// Legend toggle
+document.getElementById('legendToggle').addEventListener('click', () => {
+  const legend = document.getElementById('legend');
+  legend.classList.toggle('collapsed');
+  document.getElementById('legendToggle').textContent = legend.classList.contains('collapsed') ? '▸' : '▾';
+});
+
+// ════════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════════
+
+render();
+// Auto-fit on first load
+setTimeout(fitAll, 100);
+
+// Refit on resize
+window.addEventListener('resize', () => {
+  drawLines();
+});
+</script>
+</body>
+</html>
