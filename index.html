@@ -1,0 +1,620 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PAX System Architecture Board</title>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.min.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=DM+Sans:wght@300;400;500;600;700&display=swap');
+
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+:root {
+  --bg-deep: #f0f1f4;
+  --bg-surface: #ffffff;
+  --bg-card: #f7f8fa;
+  --bg-card-hover: #eef0f4;
+  --border-subtle: #dcdfe6;
+  --border-medium: #c4c8d4;
+  --text-primary: #1a1d26;
+  --text-secondary: #5a5f70;
+  --text-muted: #8b90a0;
+  --blue: #2b7de9;
+  --blue-dim: #e8f0fc;
+  --orange: #e07020;
+  --orange-dim: #fdf0e6;
+  --green: #1a9e50;
+  --green-dim: #e6f7ee;
+  --purple: #7c3aed;
+  --purple-dim: #f0e8fd;
+  --gray: #6b7080;
+  --gray-dim: #eef0f4;
+  --amber: #d4a843;
+  --amber-dim: #fdf6e3;
+}
+
+html, body {
+  width: 100%; height: 100%;
+  overflow: hidden;
+  background: var(--bg-deep);
+  color: var(--text-primary);
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Sidebar Nav ── */
+#sidebar {
+  position: fixed; left: 0; top: 0; bottom: 0;
+  width: 56px; z-index: 100;
+  background: rgba(255,255,255,0.95);
+  border-right: 1px solid var(--border-subtle);
+  display: flex; flex-direction: column;
+  align-items: center; padding: 16px 0;
+  gap: 6px;
+  backdrop-filter: blur(12px);
+}
+#sidebar .logo {
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 700; font-size: 18px;
+  color: var(--blue);
+  margin-bottom: 16px;
+  letter-spacing: -1px;
+}
+.nav-btn {
+  width: 40px; height: 34px; border-radius: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer; display: flex;
+  align-items: center; justify-content: center;
+  font-size: 13px; transition: all 0.2s;
+  position: relative;
+  font-family: 'JetBrains Mono', monospace;
+  font-weight: 600;
+}
+.nav-btn:hover { background: var(--bg-card); color: var(--text-primary); border-color: var(--border-subtle); }
+.nav-btn.active { background: var(--blue-dim); color: var(--blue); border-color: rgba(43,125,233,0.3); }
+.nav-btn .tooltip {
+  position: absolute; left: 52px; top: 50%;
+  transform: translateY(-50%);
+  background: var(--bg-card); color: var(--text-primary);
+  padding: 6px 12px; border-radius: 6px;
+  font-size: 11px; white-space: nowrap;
+  pointer-events: none; opacity: 0;
+  transition: opacity 0.15s;
+  border: 1px solid var(--border-subtle);
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 400;
+}
+.nav-btn:hover .tooltip { opacity: 1; }
+.nav-divider { width: 28px; height: 1px; background: var(--border-subtle); margin: 6px 0; }
+
+/* ── Top Bar ── */
+#topbar {
+  position: fixed; top: 0; left: 56px; right: 0;
+  height: 48px; z-index: 90;
+  background: rgba(255,255,255,0.92);
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex; align-items: center;
+  padding: 0 24px; gap: 16px;
+  backdrop-filter: blur(12px);
+}
+#topbar h1 {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; font-weight: 600;
+  letter-spacing: -0.3px;
+}
+#topbar h1 span { color: var(--text-muted); font-weight: 400; }
+.legend {
+  display: flex; gap: 14px; align-items: center;
+  margin-left: 16px;
+}
+.legend-item {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 11px; color: var(--text-muted);
+}
+.legend-dot { width: 8px; height: 8px; border-radius: 50%; }
+.data-toggle-btn {
+  padding: 5px 12px; border-radius: 6px;
+  border: 1px solid var(--amber);
+  background: transparent;
+  color: var(--amber);
+  cursor: pointer;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 0.5px;
+  transition: all 0.2s;
+}
+.data-toggle-btn:hover { background: var(--amber-dim); }
+.data-toggle-btn.active { background: var(--amber); color: white; }
+.zoom-controls {
+  margin-left: auto;
+  display: flex; align-items: center; gap: 8px;
+}
+.zoom-btn {
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+  transition: all 0.15s;
+}
+.zoom-btn:hover { background: var(--bg-card-hover); color: var(--text-primary); }
+#zoom-level {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; color: var(--text-muted);
+  min-width: 40px; text-align: center;
+}
+
+/* ── Canvas ── */
+#canvas-wrapper {
+  position: fixed;
+  top: 48px; left: 56px; right: 0; bottom: 0;
+  overflow: hidden;
+  cursor: grab;
+}
+#canvas-wrapper:active { cursor: grabbing; }
+#canvas {
+  position: absolute;
+  transform-origin: 0 0;
+}
+
+/* ── SVG Edges Layer ── */
+#svg-edges {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* ── Tier Backgrounds ── */
+.tier-bg {
+  position: absolute;
+  border-radius: 16px;
+  z-index: 0;
+}
+.tier-label {
+  position: absolute;
+  left: 20px; top: 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  opacity: 0.7;
+  display: flex; align-items: center; gap: 8px;
+}
+.tier-label .tier-num {
+  width: 22px; height: 22px;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+}
+.tier-subtitle {
+  position: absolute;
+  right: 20px; top: 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  opacity: 0.45;
+  letter-spacing: 0.5px;
+}
+
+/* ── Nodes ── */
+.node {
+  position: absolute;
+  width: 260px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.2s;
+  z-index: 2;
+  font-family: 'DM Sans', sans-serif;
+}
+.node:hover {
+  background: var(--bg-card-hover);
+  border-color: var(--border-medium);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.08);
+}
+.node.color-blue { border-left: 3px solid var(--blue); }
+.node.color-orange { border-left: 3px solid var(--orange); }
+.node.color-green { border-left: 3px solid var(--green); }
+.node.color-purple { border-left: 3px solid var(--purple); }
+.node.color-gray { border-left: 3px solid var(--gray); }
+
+.node-top {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 6px;
+}
+.node-icon { font-size: 15px; flex-shrink: 0; }
+.node-title {
+  font-size: 12px; font-weight: 600;
+  line-height: 1.3; letter-spacing: -0.2px;
+  flex: 1;
+}
+.node-desc {
+  font-size: 10.5px; color: var(--text-secondary);
+  line-height: 1.5;
+}
+.node-fields {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px dashed var(--border-subtle);
+}
+.node-fields .entity {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+.node-expand {
+  position: absolute; top: 8px; right: 8px;
+  font-size: 10px; color: var(--text-muted);
+  opacity: 0; transition: opacity 0.15s;
+}
+.node:hover .node-expand { opacity: 1; }
+
+/* ── Progress Ring ── */
+.progress-ring {
+  position: absolute;
+  top: -6px; right: -6px;
+  width: 26px; height: 26px;
+  background: var(--bg-surface);
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+}
+.progress-ring svg { display: block; }
+
+/* ── Edge Styles ── */
+.edge-path {
+  fill: none;
+  stroke-width: 2;
+  stroke-opacity: 0.5;
+}
+.edge-path.dashed {
+  stroke-dasharray: 6 4;
+  stroke-opacity: 0.4;
+}
+.edge-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  fill: var(--text-muted);
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* ── Data Connection Styles ── */
+.data-conn-path {
+  fill: none;
+  stroke: var(--amber);
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  stroke-opacity: 0.7;
+}
+.data-conn-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  fill: var(--amber);
+  text-anchor: middle;
+  pointer-events: none;
+}
+
+/* ── Loading ── */
+#loading-indicator {
+  position: fixed;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 14px; color: var(--text-muted);
+  z-index: 50;
+}
+#loading-indicator.hidden { display: none; }
+
+/* ── Modal Overlay ── */
+#modal-overlay {
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,0.3);
+  z-index: 500;
+  display: none;
+  align-items: center; justify-content: center;
+  backdrop-filter: blur(4px);
+}
+#modal-overlay.visible { display: flex; }
+#modal {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: 16px;
+  width: 560px; max-width: 90vw;
+  max-height: 80vh;
+  overflow-y: auto;
+  padding: 28px;
+  box-shadow: 0 24px 64px rgba(0,0,0,0.15);
+  animation: modalIn 0.2s ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+#modal-close {
+  float: right;
+  width: 32px; height: 32px; border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  cursor: pointer; font-size: 16px;
+  display: flex; align-items: center; justify-content: center;
+}
+#modal-close:hover { background: var(--bg-card-hover); }
+#modal-title {
+  font-size: 18px; font-weight: 700;
+  margin-bottom: 4px;
+  letter-spacing: -0.3px;
+  padding-right: 40px;
+}
+#modal-progress-bar {
+  height: 4px; border-radius: 2px;
+  background: var(--bg-card);
+  margin: 10px 0 16px;
+  overflow: hidden;
+}
+#modal-progress-fill {
+  height: 100%; border-radius: 2px;
+  transition: width 0.3s ease;
+}
+#modal-body {
+  font-size: 13px; line-height: 1.7;
+  color: var(--text-secondary);
+}
+#modal-body h3 {
+  font-size: 12px; font-weight: 600;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 16px 0 8px;
+  font-family: 'JetBrains Mono', monospace;
+}
+#modal-body h3:first-child { margin-top: 0; }
+#modal-body ul { padding-left: 18px; margin-bottom: 8px; }
+#modal-body li { margin-bottom: 4px; }
+#modal-body code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  background: var(--bg-card);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+.modal-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px; font-weight: 500;
+  padding: 2px 7px; border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: inline-block;
+}
+
+/* ── Infrastructure Panel ── */
+#infra-panel {
+  position: fixed;
+  bottom: 0; left: 56px; right: 0;
+  z-index: 80;
+  background: var(--bg-surface);
+  border-top: 1px solid var(--border-subtle);
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 50vh;
+}
+#infra-panel.collapsed { transform: translateY(calc(100% - 42px)); }
+#infra-toggle {
+  display: flex; align-items: center; justify-content: center;
+  gap: 8px; height: 42px;
+  cursor: pointer; border: none;
+  background: transparent; width: 100%;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: 0.5px;
+  transition: color 0.2s;
+}
+#infra-toggle:hover { color: var(--text-primary); }
+#infra-toggle .chevron {
+  transition: transform 0.35s ease;
+  font-size: 14px;
+}
+#infra-panel.collapsed #infra-toggle .chevron { transform: rotate(180deg); }
+#infra-content {
+  padding: 0 24px 20px;
+  overflow-y: auto;
+  max-height: calc(50vh - 42px);
+}
+.infra-group { margin-bottom: 16px; }
+.infra-group:last-child { margin-bottom: 0; }
+.infra-group-title {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px; font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 8px;
+}
+.infra-group-title .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+}
+.infra-row {
+  display: flex; gap: 10px; flex-wrap: wrap;
+}
+.infra-card {
+  min-width: 140px; max-width: 180px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+}
+.infra-card:hover {
+  border-color: var(--border-medium);
+  background: var(--bg-card-hover);
+}
+.infra-card-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px; font-weight: 600;
+  margin-bottom: 3px;
+}
+.infra-card-desc {
+  font-size: 10px; color: var(--text-muted);
+  line-height: 1.4;
+}
+
+/* ── Minimap ── */
+#minimap {
+  position: fixed;
+  bottom: 56px; right: 16px;
+  width: 200px; height: 140px;
+  background: rgba(255,255,255,0.95);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  z-index: 100;
+  overflow: hidden;
+}
+#minimap svg { width: 100%; height: 100%; }
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-medium); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #a0a5b5; }
+
+/* ── Print ── */
+@media print {
+  #sidebar, #topbar, #minimap, #infra-panel, .zoom-controls, .progress-ring, .node-expand { display: none !important; }
+  #canvas-wrapper { position: static; overflow: visible; }
+  #canvas { transform: none !important; position: static; width: 100%; }
+}
+</style>
+</head>
+<body>
+
+<!-- Sidebar -->
+<nav id="sidebar">
+  <div class="logo">P</div>
+  <button class="nav-btn active" data-tier="0" onclick="jumpToTier(0)">
+    <span>0</span>
+    <span class="tooltip">Company Setup</span>
+  </button>
+  <button class="nav-btn" data-tier="1" onclick="jumpToTier(1)">
+    <span>1</span>
+    <span class="tooltip">User Onboarding</span>
+  </button>
+  <button class="nav-btn" data-tier="2" onclick="jumpToTier(2)">
+    <span>2</span>
+    <span class="tooltip">Inspection Trigger</span>
+  </button>
+  <button class="nav-btn" data-tier="3" onclick="jumpToTier(3)">
+    <span>3</span>
+    <span class="tooltip">Data Capture</span>
+  </button>
+  <button class="nav-btn" data-tier="4" onclick="jumpToTier(4)">
+    <span>4</span>
+    <span class="tooltip">AI Processing</span>
+  </button>
+  <button class="nav-btn" data-tier="5" onclick="jumpToTier(5)">
+    <span>5</span>
+    <span class="tooltip">Completion & Review</span>
+  </button>
+  <button class="nav-btn" data-tier="6" onclick="jumpToTier(6)">
+    <span>6</span>
+    <span class="tooltip">Delivery & Output</span>
+  </button>
+  <button class="nav-btn" data-tier="7" onclick="jumpToTier(7)">
+    <span>7</span>
+    <span class="tooltip">Intelligence</span>
+  </button>
+  <div class="nav-divider"></div>
+  <button class="nav-btn" onclick="resetView()">
+    <span>&#x2302;</span>
+    <span class="tooltip">Reset View</span>
+  </button>
+  <button class="nav-btn" onclick="fitAll()">
+    <span>&#x29C9;</span>
+    <span class="tooltip">Fit All</span>
+  </button>
+</nav>
+
+<!-- Top Bar -->
+<header id="topbar">
+  <h1>PAX System Architecture <span>/ Form-Centric Flow</span></h1>
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Dashboard</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--orange)"></div>Mobile</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>API/Infra</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>AI/ML</div>
+    <div class="legend-item"><div class="legend-dot" style="background:var(--gray)"></div>External</div>
+    <div class="legend-item" style="margin-left:8px; border-left:1px solid var(--border-subtle); padding-left:12px">
+      <svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="var(--green)" stroke-width="2.5"/></svg>
+      Shipped
+    </div>
+    <div class="legend-item">
+      <svg width="14" height="14" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#dcdfe6" stroke-width="2.5"/><circle cx="12" cy="12" r="10" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-dasharray="62.83" stroke-dashoffset="31.4" transform="rotate(-90 12 12)" stroke-linecap="round"/></svg>
+      Building
+    </div>
+  </div>
+  <button class="data-toggle-btn" id="data-toggle" onclick="toggleDataConnections()">&#x26A1; DATA FIELDS</button>
+  <div class="zoom-controls">
+    <button class="zoom-btn" onclick="zoomOut()">&minus;</button>
+    <span id="zoom-level">100%</span>
+    <button class="zoom-btn" onclick="zoomIn()">+</button>
+  </div>
+</header>
+
+<!-- Canvas -->
+<div id="canvas-wrapper">
+  <div id="canvas">
+    <svg id="svg-edges"></svg>
+  </div>
+</div>
+
+<!-- Loading Indicator -->
+<div id="loading-indicator">Computing layout...</div>
+
+<!-- Modal -->
+<div id="modal-overlay" onclick="closeModal(event)">
+  <div id="modal" onclick="event.stopPropagation()">
+    <button id="modal-close" onclick="closeModal()">&times;</button>
+    <div id="modal-title"></div>
+    <div id="modal-progress-bar"><div id="modal-progress-fill"></div></div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- Minimap -->
+<div id="minimap">
+  <svg id="minimap-svg"></svg>
+</div>
+
+<!-- Infrastructure Panel -->
+<div id="infra-panel" class="collapsed">
+  <button id="infra-toggle" onclick="toggleInfra()">
+    Infrastructure &amp; Stack
+    <span class="chevron">&#x25B2;</span>
+  </button>
+  <div id="infra-content"></div>
+</div>
+
+<!-- Scripts (order matters — data files declare globals, app.js consumes them) -->
+<script src="js/constants.js"></script>
+<script src="data/tiers.js"></script>
+<script src="data/nodes.js"></script>
+<script src="data/edges.js"></script>
+<script src="data/nodeDetails.js"></script>
+<script src="data/infraGroups.js"></script>
+<script src="js/app.js"></script>
+
+</body>
+</html>
