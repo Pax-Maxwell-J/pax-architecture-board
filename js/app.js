@@ -13,11 +13,11 @@ function buildElkGraph() {
     id: 'root',
     layoutOptions: {
       'elk.algorithm': 'layered',
-      'elk.direction': 'DOWN',
+      'elk.direction': 'RIGHT',
       'elk.edgeRouting': 'SPLINES',
       'elk.partitioning.activate': 'true',
-      'elk.layered.spacing.nodeNodeBetweenLayers': '110',
-      'elk.spacing.nodeNode': '40',
+      'elk.layered.spacing.nodeNodeBetweenLayers': '80',
+      'elk.spacing.nodeNode': '30',
       'elk.layered.spacing.edgeNodeBetweenLayers': '30',
       'elk.layered.spacing.edgeEdgeBetweenLayers': '18',
       'elk.layered.crossingMinimization.strategy': 'LAYER_SWEEP',
@@ -121,7 +121,7 @@ function render(layout) {
     const poly = document.createElementNS(NS, 'polygon');
     poly.setAttribute('points', '0 0.5, 7 3, 0 5.5');
     poly.setAttribute('fill', color);
-    poly.setAttribute('opacity', '0.7');
+    poly.setAttribute('opacity', '1');
     marker.appendChild(poly);
     defs.appendChild(marker);
 
@@ -136,7 +136,7 @@ function render(layout) {
     const poly2 = document.createElementNS(NS, 'polygon');
     poly2.setAttribute('points', '0 0.5, 7 3, 0 5.5');
     poly2.setAttribute('fill', color);
-    poly2.setAttribute('opacity', '0.7');
+    poly2.setAttribute('opacity', '1');
     marker2.appendChild(poly2);
     defs.appendChild(marker2);
   });
@@ -215,14 +215,14 @@ function renderEdges(layout) {
         path.setAttribute('stroke', color);
         path.setAttribute('fill', 'none');
         path.setAttribute('stroke-width', '2');
-        path.setAttribute('stroke-opacity', '0.5');
+        path.setAttribute('stroke-opacity', '0.8');
         path.setAttribute('marker-end', `url(#arrow-${arrowName})`);
         if (edgeData.bidirectional) {
           path.setAttribute('marker-start', `url(#arrow-${arrowName}-rev)`);
         }
         if (edgeData.dashed) {
           path.setAttribute('stroke-dasharray', '6 4');
-          path.setAttribute('stroke-opacity', '0.4');
+          path.setAttribute('stroke-opacity', '0.7');
         }
         svgEdges.appendChild(path);
       });
@@ -243,7 +243,7 @@ function renderEdges(layout) {
     });
   }
 
-  // Loop/backward edges (manually drawn)
+  // Loop/backward edges (manually drawn — bow downward for horizontal layout)
   edges.filter(e => e.type === 'loop').forEach(e => {
     const src = posMap[e.from];
     const tgt = posMap[e.to];
@@ -253,28 +253,28 @@ function renderEdges(layout) {
     const color = COLORS[srcNode?.color]?.stroke || '#a0a5b5';
     const arrowName = srcNode?.color || 'muted';
 
-    const x1 = src.x + src.w;
-    const y1 = src.y + src.h / 2;
-    const x2 = tgt.x + tgt.w;
-    const y2 = tgt.y + tgt.h / 2;
-    const loopX = Math.max(x1, x2) + 200;
+    const x1 = src.x + src.w / 2;
+    const y1 = src.y + src.h;
+    const x2 = tgt.x + tgt.w / 2;
+    const y2 = tgt.y + tgt.h;
+    const loopY = Math.max(y1, y2) + 200;
 
     const path = document.createElementNS(NS, 'path');
-    path.setAttribute('d', `M ${x1},${y1} C ${loopX},${y1} ${loopX},${y2} ${x2},${y2}`);
+    path.setAttribute('d', `M ${x1},${y1} C ${x1},${loopY} ${x2},${loopY} ${x2},${y2}`);
     path.setAttribute('fill', 'none');
     path.setAttribute('stroke', color);
     path.setAttribute('stroke-width', '2');
     path.setAttribute('stroke-dasharray', '6 4');
-    path.setAttribute('stroke-opacity', '0.4');
+    path.setAttribute('stroke-opacity', '0.7');
     path.setAttribute('marker-end', `url(#arrow-${arrowName})`);
     svgEdges.appendChild(path);
 
     if (e.label) {
       const text = document.createElementNS(NS, 'text');
       text.setAttribute('class', 'edge-label');
-      text.setAttribute('x', loopX + 8);
-      text.setAttribute('y', (y1 + y2) / 2);
-      text.setAttribute('text-anchor', 'start');
+      text.setAttribute('x', (x1 + x2) / 2);
+      text.setAttribute('y', loopY + 16);
+      text.setAttribute('text-anchor', 'middle');
       text.textContent = e.label;
       svgEdges.appendChild(text);
     }
@@ -580,7 +580,7 @@ function renderMinimap() {
       .attr('width', b.width * minimapScale)
       .attr('height', b.height * minimapScale)
       .attr('fill', t.accent)
-      .attr('opacity', 0.15)
+      .attr('opacity', 0.3)
       .attr('rx', 2);
   });
 
@@ -593,7 +593,7 @@ function renderMinimap() {
       .attr('width', Math.max(2, NODE_W * minimapScale))
       .attr('height', Math.max(2, p.h * minimapScale))
       .attr('fill', COLORS[n.color]?.stroke || '#999')
-      .attr('opacity', 0.7)
+      .attr('opacity', 1)
       .attr('rx', 1);
   });
 

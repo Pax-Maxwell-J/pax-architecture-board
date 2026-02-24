@@ -1,0 +1,372 @@
+{
+  "schema_id": "phase1-esa",
+  "schema_version": "1.0.0",
+  "label": "Phase I Environmental Site Assessment",
+  "standard": "ASTM E1527-21",
+  "cfr": "40 CFR Part 312",
+  "capture_mode": "DirectedNarration",
+  "sections": [
+    {
+      "id": "admin",
+      "label": "Report Administration",
+      "source": "operator",
+      "fields": [
+        { "id": "report_date", "label": "Report Date", "type": "Date", "required": true, "validation": ["not_future", "gte:inspection_date"] },
+        { "id": "project_number", "label": "Project Number", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "client_name", "label": "Client Name", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "client_title", "label": "Client Title", "type": "String", "required": false },
+        { "id": "client_company", "label": "Client Company", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "client_address", "label": "Client Address", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "lender_name", "label": "Lender / Additional Client", "type": "String", "required": false },
+        { "id": "prepared_by_firm", "label": "Preparing Firm", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "prepared_by_firm_address", "label": "Preparing Firm Address", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "preparer_name", "label": "Report Preparer", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "preparer_title", "label": "Preparer Title", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "reviewer_name", "label": "Report Reviewer", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "reviewer_title", "label": "Reviewer Title", "type": "String", "required": true, "validation": ["not_empty"] }
+      ]
+    },
+    {
+      "id": "property_id",
+      "label": "Subject Property Identification",
+      "source": "narration",
+      "fields": [
+        { "id": "property_address_street", "label": "Street Address", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "property_address_city", "label": "City", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "property_address_county", "label": "County", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "property_address_state", "label": "State", "type": "String", "required": true, "validation": ["us_state"] },
+        { "id": "property_address_zip", "label": "ZIP Code", "type": "String", "required": false, "validation": ["regex:^\\d{5}(-\\d{4})?$"] },
+        { "id": "property_geolocation", "label": "GPS Coordinates", "type": "GeoLocation", "required": true, "validation": ["continental_us"] },
+        { "id": "property_use_current", "label": "Current Property Use", "type": "Enum", "required": true, "options": ["Commercial", "Industrial", "Residential", "Agricultural", "Vacant", "Mixed-Use"] },
+        { "id": "parcel_number", "label": "Tax Parcel / Index Number", "type": "String", "required": false },
+        { "id": "legal_description", "label": "Legal Description", "type": "Text", "required": false },
+        { "id": "zoning_designation", "label": "Zoning Designation", "type": "String", "required": false },
+        { "id": "location_description", "label": "Relative Location Description", "type": "Text", "required": false }
+      ]
+    },
+    {
+      "id": "physical_description",
+      "label": "Property Physical Description",
+      "source": "narration",
+      "fields": [
+        { "id": "land_area_sf", "label": "Total Land Area (sf)", "type": "Number", "required": true, "validation": ["positive"] },
+        { "id": "land_shape", "label": "Parcel Shape", "type": "Enum", "required": false, "options": ["Rectangular", "Irregular", "L-Shaped", "Triangular", "Other"] },
+        { "id": "num_structures", "label": "Number of Structures", "type": "Number", "required": true, "validation": ["non_negative_integer"] },
+        { "id": "num_stories", "label": "Number of Stories", "type": "Number", "required": true, "validation": ["positive_integer"], "conditional": "num_structures > 0" },
+        { "id": "construction_date", "label": "Date of Construction", "type": "String", "required": true, "conditional": "num_structures > 0" },
+        { "id": "construction_type", "label": "Construction Type", "type": "String", "required": true, "validation": ["not_empty"], "conditional": "num_structures > 0" },
+        { "id": "gross_building_area_sf", "label": "Gross Building Area (sf)", "type": "Number", "required": true, "validation": ["positive", "lte:land_area_sf"], "conditional": "num_structures > 0" },
+        { "id": "building_layout", "label": "Building Layout / Division", "type": "Text", "required": false },
+        { "id": "interior_finishes", "label": "Interior Finishes", "type": "Text", "required": false },
+        { "id": "hvac_description", "label": "Heating / Cooling Systems", "type": "Text", "required": false },
+        { "id": "remaining_grounds", "label": "Remaining Grounds Description", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "remaining_grounds_photos", "label": "Grounds Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] },
+        { "id": "potable_water_source", "label": "Potable Water Source", "type": "Enum", "required": true, "options": ["Municipal", "Private_Well", "Community_Well", "Unknown"] },
+        { "id": "potable_water_supplier", "label": "Water Supplier Name", "type": "String", "required": false },
+        { "id": "monitoring_wells_present", "label": "Monitoring Wells Present", "type": "Boolean", "required": true, "default": false },
+        { "id": "wastewater_system", "label": "Wastewater System", "type": "Enum", "required": true, "options": ["Municipal_Sewer", "Septic", "Combined", "Unknown"] },
+        { "id": "stormwater_system", "label": "Stormwater System", "type": "Enum", "required": true, "options": ["Municipal_Sewer", "Combined_Sewer", "Onsite_Retention", "Surface_Discharge", "Unknown"] },
+        { "id": "septic_system_present", "label": "Septic System Present", "type": "Boolean", "required": true, "default": false },
+        { "id": "floor_drains_present", "label": "Floor Drains Present", "type": "Boolean", "required": false },
+        { "id": "floor_drain_discharge", "label": "Floor Drain Discharge", "type": "Text", "required": false, "conditional": "floor_drains_present == true" }
+      ]
+    },
+    {
+      "id": "current_past_uses",
+      "label": "Current and Past Uses",
+      "source": "narration",
+      "fields": [
+        { "id": "current_tenant_name", "label": "Current Tenant / Occupant", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "current_operations", "label": "Current Operations", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "hazmat_on_site", "label": "Hazardous Materials On-Site", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "special_waste_generated", "label": "Special Waste Streams", "type": "Text", "required": false },
+        { "id": "housekeeping_assessment", "label": "Housekeeping Assessment", "type": "Enum", "required": true, "options": ["Satisfactory", "Unsatisfactory", "Mixed"] },
+        { "id": "past_uses", "label": "Historical Uses", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "past_uses_sources", "label": "Historical Use Sources", "type": "Text", "required": false },
+        { "id": "adjacent_north", "label": "Adjacent Site — North", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "adjacent_south", "label": "Adjacent Site — South", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "adjacent_east", "label": "Adjacent Site — East", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "adjacent_west", "label": "Adjacent Site — West", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "adjacent_past_uses", "label": "Adjacent Sites Historical Uses", "type": "Text", "required": false }
+      ]
+    },
+    {
+      "id": "records_review",
+      "label": "Records Review",
+      "source": "narration+operator",
+      "fields": [
+        { "id": "topography_description", "label": "Topographic Setting", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "geology_description", "label": "Surficial Geology", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "aquifer_vulnerability", "label": "Aquifer Contamination Potential", "type": "String", "required": false },
+        { "id": "radon_county_pct", "label": "County Radon Exceedance %", "type": "Number", "required": false, "validation": ["range:0-100"] },
+        { "id": "radon_county_avg", "label": "County Avg Radon (pCi/L)", "type": "Number", "required": false, "validation": ["non_negative"] },
+        { "id": "fill_material_status", "label": "Imported Fill Material Status", "type": "Enum", "required": false, "options": ["Documented_Clean", "Undocumented", "Not_Applicable", "Unknown"], "default": "Unknown" },
+        { "id": "db_report_provider", "label": "Database Report Provider", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "subject_property_db_listed", "label": "Subject Property on Databases", "type": "Boolean", "required": true },
+        { "id": "subject_property_db_details", "label": "Subject Property DB Details", "type": "Text", "required": false, "conditional": "subject_property_db_listed == true" },
+        { "id": "adjacent_sites_db_findings", "label": "Adjacent Sites DB Findings", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "aerial_photos_years", "label": "Aerial Photo Years Reviewed", "type": "String", "required": true },
+        { "id": "aerial_photos_findings", "label": "Aerial Photo Findings", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "building_permits_findings", "label": "Building Permits FOIA Results", "type": "Text", "required": false },
+        { "id": "fire_dept_findings", "label": "Fire Dept FOIA Results", "type": "Text", "required": false },
+        { "id": "sanborn_maps_available", "label": "Sanborn Maps Available", "type": "Boolean", "required": true },
+        { "id": "sanborn_maps_findings", "label": "Sanborn Maps Findings", "type": "Text", "required": false, "conditional": "sanborn_maps_available == true" },
+        { "id": "city_directory_findings", "label": "City Directory Findings", "type": "Text", "required": false },
+        { "id": "env_liens_auls", "label": "Environmental Liens / AULs Found", "type": "Boolean", "required": true },
+        { "id": "env_liens_details", "label": "Lien / AUL Details", "type": "Text", "required": false, "conditional": "env_liens_auls == true" },
+        { "id": "client_supplied_info", "label": "Client-Supplied Information", "type": "Text", "required": false }
+      ]
+    },
+    {
+      "id": "interviews",
+      "label": "Interviews",
+      "source": "narration",
+      "fields": [
+        { "id": "interviewees", "label": "Persons Interviewed", "type": "Array<Object>", "required": true, "validation": ["min_length:1"],
+          "item_fields": [
+            { "id": "name", "label": "Name", "type": "String", "required": true },
+            { "id": "title", "label": "Title / Relation", "type": "String", "required": true },
+            { "id": "years_associated", "label": "Years Associated", "type": "Number", "required": false }
+          ]
+        },
+        { "id": "interview_findings", "label": "Key Findings from Interviews", "type": "Text", "required": false },
+        { "id": "former_owner_interviewed", "label": "Former Owner Interviewed", "type": "Boolean", "required": true },
+        { "id": "former_owner_data_gap", "label": "Former Owner Data Gap Note", "type": "Text", "required": false, "conditional": "former_owner_interviewed == false" }
+      ]
+    },
+    {
+      "id": "recon_meta",
+      "label": "Site Reconnaissance — Metadata",
+      "source": "narration+system",
+      "fields": [
+        { "id": "inspection_date", "label": "Inspection Date", "type": "Date", "required": true, "validation": ["not_future"] },
+        { "id": "inspection_time", "label": "Inspection Start Time", "type": "String", "required": false },
+        { "id": "inspector_name", "label": "Inspector Name", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "inspector_title", "label": "Inspector Title", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "weather_sky", "label": "Sky Conditions", "type": "Enum", "required": true, "options": ["Clear", "Partly_Cloudy", "Overcast", "Rainy", "Snowy"] },
+        { "id": "weather_temp_f", "label": "Temperature (°F)", "type": "Number", "required": true, "validation": ["range:-40-130"] },
+        { "id": "weather_wind_mph", "label": "Wind Speed (mph)", "type": "Number", "required": false, "validation": ["non_negative"] },
+        { "id": "weather_wind_dir", "label": "Wind Direction", "type": "Enum", "required": false, "options": ["N", "NE", "E", "SE", "S", "SW", "W", "NW", "Calm"] },
+        { "id": "ground_conditions", "label": "Ground Surface Conditions", "type": "Enum", "required": true, "options": ["Dry", "Wet", "Snow_Covered", "Frozen", "Muddy"] }
+      ]
+    },
+    {
+      "id": "recon_usts",
+      "label": "Site Reconnaissance — USTs",
+      "source": "narration",
+      "fields": [
+        { "id": "usts_present", "label": "USTs or Evidence of USTs", "type": "Boolean", "required": true },
+        { "id": "usts_details", "label": "UST Details", "type": "Text", "required": false, "conditional": "usts_present == true" },
+        { "id": "usts_photos", "label": "UST Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_asts",
+      "label": "Site Reconnaissance — ASTs / Drums / Containers",
+      "source": "narration",
+      "fields": [
+        { "id": "asts_present", "label": "ASTs / Drums / Containers Present", "type": "Boolean", "required": true },
+        { "id": "asts_inventory", "label": "Container Inventory", "type": "Array<Object>", "required": false, "conditional": "asts_present == true",
+          "item_fields": [
+            { "id": "container_type", "label": "Type", "type": "Enum", "required": true, "options": ["AST", "Drum_55gal", "Drum_Other", "Tote", "Parts_Washer", "Compressed_Gas", "Household_Container", "Other"] },
+            { "id": "quantity", "label": "Quantity", "type": "Number", "required": true, "validation": ["positive_integer"] },
+            { "id": "capacity_gal", "label": "Capacity (gal)", "type": "Number", "required": false, "validation": ["positive"] },
+            { "id": "contents", "label": "Contents", "type": "String", "required": true },
+            { "id": "material", "label": "Container Material", "type": "Enum", "required": false, "options": ["Steel_SingleWall", "Steel_DoubleWall", "Plastic", "Fiberglass", "Unknown"] },
+            { "id": "location", "label": "Location on Property", "type": "String", "required": true },
+            { "id": "staining_observed", "label": "Staining Under/Around", "type": "Boolean", "required": true }
+          ]
+        },
+        { "id": "asts_photos", "label": "Container Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_staining",
+      "label": "Site Reconnaissance — Staining / Disturbance / Vegetation",
+      "source": "narration",
+      "fields": [
+        { "id": "staining_present", "label": "Staining or Disturbance Observed", "type": "Boolean", "required": true },
+        { "id": "staining_details", "label": "Staining Details", "type": "Text", "required": false, "conditional": "staining_present == true" },
+        { "id": "staining_assessment", "label": "Staining Significance", "type": "Enum", "required": false, "options": ["De_Minimis", "Moderate_Concern", "Significant_Concern", "REC"] },
+        { "id": "stressed_vegetation", "label": "Stressed Vegetation Observed", "type": "Boolean", "required": true },
+        { "id": "staining_photos", "label": "Staining Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_stormwater",
+      "label": "Site Reconnaissance — Stormwater / Standing Water / Wetlands",
+      "source": "narration",
+      "fields": [
+        { "id": "stormwater_description", "label": "Stormwater Management", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "petroleum_sheens", "label": "Petroleum Sheens in Drains", "type": "Boolean", "required": true },
+        { "id": "unusual_odors_stormwater", "label": "Unusual Odors from Drains", "type": "Boolean", "required": true },
+        { "id": "standing_water_present", "label": "Standing Water / Ponds / Lagoons", "type": "Boolean", "required": true },
+        { "id": "wetlands_observed", "label": "Suspect Wetland Vegetation", "type": "Boolean", "required": true },
+        { "id": "wetlands_nwi", "label": "NWI Map Status", "type": "Enum", "required": false, "options": ["No_Wetlands_Mapped", "Wetlands_Mapped", "Not_Reviewed"] },
+        { "id": "stormwater_photos", "label": "Stormwater Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_waste",
+      "label": "Site Reconnaissance — Waste Disposal",
+      "source": "narration",
+      "fields": [
+        { "id": "solid_waste_hauler", "label": "Solid Waste Hauler", "type": "String", "required": true, "validation": ["not_empty"] },
+        { "id": "special_waste_disposal", "label": "Special / Hazardous Waste Disposal", "type": "Text", "required": false },
+        { "id": "improper_disposal_evidence", "label": "Evidence of Improper Disposal", "type": "Boolean", "required": true },
+        { "id": "waste_photos", "label": "Waste Area Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_pcbs",
+      "label": "Site Reconnaissance — PCBs",
+      "source": "narration",
+      "fields": [
+        { "id": "transformers_present", "label": "Electrical Transformers Present", "type": "Boolean", "required": true },
+        { "id": "transformer_count", "label": "Number of Transformers", "type": "Number", "required": false, "conditional": "transformers_present == true" },
+        { "id": "transformer_pcb_sticker", "label": "PCB Sticker Status", "type": "Enum", "required": false, "options": ["Yes_PCB", "No_Sticker", "Non_PCB_Sticker", "Not_Visible"], "conditional": "transformers_present == true" },
+        { "id": "transformer_owner", "label": "Transformer Owner", "type": "String", "required": false },
+        { "id": "transformer_leaking", "label": "Evidence of Leaking", "type": "Boolean", "required": false, "conditional": "transformers_present == true" },
+        { "id": "other_pcb_equipment", "label": "Other Potential PCB Equipment", "type": "Text", "required": false },
+        { "id": "pcb_photos", "label": "PCB Equipment Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_air",
+      "label": "Site Reconnaissance — Air Quality / Emissions",
+      "source": "narration",
+      "fields": [
+        { "id": "unusual_odors_interior", "label": "Unusual Odors — Interior", "type": "Boolean", "required": true },
+        { "id": "unusual_odors_exterior", "label": "Unusual Odors — Exterior", "type": "Boolean", "required": true },
+        { "id": "point_source_emissions", "label": "Point Source Emissions", "type": "Boolean", "required": true },
+        { "id": "point_source_details", "label": "Emission Source Details", "type": "Text", "required": false, "conditional": "point_source_emissions == true" },
+        { "id": "vec_assessment", "label": "Vapor Encroachment Assessment", "type": "Enum", "required": true, "options": ["VEC_Unlikely", "VEC_Possible", "VEC_Likely", "VEC_Confirmed"] }
+      ]
+    },
+    {
+      "id": "recon_acm",
+      "label": "Site Reconnaissance — Asbestos (ACM)",
+      "source": "narration",
+      "fields": [
+        { "id": "acm_observed", "label": "Suspect ACM Observed", "type": "Boolean", "required": true },
+        { "id": "acm_inventory", "label": "Suspect ACM Inventory", "type": "Array<Object>", "required": false, "conditional": "acm_observed == true",
+          "item_fields": [
+            { "id": "material", "label": "Material", "type": "String", "required": true },
+            { "id": "location", "label": "Location", "type": "String", "required": true },
+            { "id": "condition", "label": "Condition", "type": "Enum", "required": true, "options": ["Good", "Fair", "Poor", "Damaged", "Not_Observed"] },
+            { "id": "friability", "label": "Friability", "type": "Enum", "required": true, "options": ["Friable", "Non_Friable"] }
+          ]
+        },
+        { "id": "acm_recommendation", "label": "ACM Management Recommendation", "type": "Text", "required": false },
+        { "id": "acm_photos", "label": "ACM Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_lbp",
+      "label": "Site Reconnaissance — Lead-Based Paint",
+      "source": "narration",
+      "fields": [
+        { "id": "lbp_potential", "label": "Lead-Based Paint Potential", "type": "Enum", "required": true, "options": ["Unlikely_Post1978", "Possible_Pre1978", "Likely_Pre1978", "Confirmed"] },
+        { "id": "paint_condition", "label": "Paint Surface Condition", "type": "Enum", "required": false, "options": ["Good", "Fair", "Deteriorated", "Chipping_Peeling"] },
+        { "id": "lbp_details", "label": "LBP Details", "type": "Text", "required": false }
+      ]
+    },
+    {
+      "id": "recon_misc",
+      "label": "Site Reconnaissance — Miscellaneous Equipment",
+      "source": "narration",
+      "fields": [
+        { "id": "fluorescent_lights", "label": "Fluorescent Lighting", "type": "Boolean", "required": false },
+        { "id": "mercury_thermostats", "label": "Mercury Thermostats", "type": "Boolean", "required": false },
+        { "id": "cfc_equipment", "label": "CFC Refrigerant Equipment", "type": "Boolean", "required": false },
+        { "id": "misc_equipment_details", "label": "Equipment Details", "type": "Text", "required": false }
+      ]
+    },
+    {
+      "id": "recon_bio",
+      "label": "Site Reconnaissance — Biological Hazards / Mold",
+      "source": "narration",
+      "fields": [
+        { "id": "mold_evidence", "label": "Evidence of Mold / Bio Hazards", "type": "Boolean", "required": true },
+        { "id": "mold_details", "label": "Mold Details", "type": "Text", "required": false, "conditional": "mold_evidence == true" },
+        { "id": "mold_photos", "label": "Mold Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "recon_pfas",
+      "label": "Site Reconnaissance — Emerging Contaminants (PFAS)",
+      "source": "narration",
+      "fields": [
+        { "id": "pfas_evidence", "label": "Evidence of PFAS Use", "type": "Boolean", "required": true },
+        { "id": "pfas_details", "label": "PFAS Details", "type": "Text", "required": false, "conditional": "pfas_evidence == true" }
+      ]
+    },
+    {
+      "id": "recon_surrounding",
+      "label": "Site Reconnaissance — Surrounding Sites",
+      "source": "narration",
+      "fields": [
+        { "id": "surrounding_concerns", "label": "Environmental Concerns on Surrounding Sites", "type": "Boolean", "required": true },
+        { "id": "surrounding_details", "label": "Surrounding Concern Details", "type": "Text", "required": false, "conditional": "surrounding_concerns == true" },
+        { "id": "surrounding_photos", "label": "Surrounding Sites Photos", "type": "Array<Photo>", "required": false, "validation": ["each:gps_timestamp"] }
+      ]
+    },
+    {
+      "id": "findings",
+      "label": "Findings and Conclusions",
+      "source": "ai+reviewer",
+      "fields": [
+        { "id": "recs_identified", "label": "RECs Identified", "type": "Boolean", "required": true },
+        { "id": "recs_list", "label": "REC Descriptions", "type": "Array<Text>", "required": false, "conditional": "recs_identified == true" },
+        { "id": "crecs_identified", "label": "Controlled RECs Identified", "type": "Boolean", "required": true },
+        { "id": "crecs_list", "label": "CREC Descriptions", "type": "Array<Text>", "required": false, "conditional": "crecs_identified == true" },
+        { "id": "hrecs_identified", "label": "Historical RECs Identified", "type": "Boolean", "required": true },
+        { "id": "hrecs_list", "label": "HREC Descriptions", "type": "Array<Text>", "required": false, "conditional": "hrecs_identified == true" },
+        { "id": "data_gaps_identified", "label": "Significant Data Gaps", "type": "Boolean", "required": true },
+        { "id": "data_gaps_list", "label": "Data Gap Descriptions", "type": "Array<Text>", "required": false, "conditional": "data_gaps_identified == true" },
+        { "id": "further_investigation", "label": "Further Investigation Recommended", "type": "Boolean", "required": true },
+        { "id": "findings_summary", "label": "Findings Summary", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "business_env_risks", "label": "Business Environmental Risks", "type": "Text", "required": false }
+      ]
+    },
+    {
+      "id": "certification",
+      "label": "Certification & Limiting Conditions",
+      "source": "operator",
+      "fields": [
+        { "id": "limiting_conditions", "label": "Limiting Conditions", "type": "Text", "required": true, "validation": ["not_empty"] },
+        { "id": "ep_names", "label": "Environmental Professional Name(s)", "type": "Array<String>", "required": true, "validation": ["min_length:1"] },
+        { "id": "ep_certification_date", "label": "EP Declaration Date", "type": "Date", "required": true, "validation": ["equals:report_date"] },
+        { "id": "ep_qualifications_confirmed", "label": "EP Qualifications Confirmed", "type": "Boolean", "required": true, "validation": ["equals:true"] }
+      ]
+    },
+    {
+      "id": "viability",
+      "label": "Assessment Viability Dates",
+      "source": "system",
+      "fields": [
+        { "id": "date_database_records", "label": "Database Records Date", "type": "Date", "required": true, "validation": ["not_future"] },
+        { "id": "date_interviews", "label": "Interviews Date", "type": "Date", "required": true, "validation": ["not_future"] },
+        { "id": "date_visual_inspection", "label": "Visual Inspection Date", "type": "Date", "required": true, "validation": ["equals:inspection_date"] },
+        { "id": "date_ep_declaration", "label": "EP Declaration Date", "type": "Date", "required": true, "validation": ["equals:report_date"] },
+        { "id": "viability_expiration", "label": "180-Day Expiration", "type": "Date", "required": true, "validation": ["computed:min(date_database_records,date_interviews,date_visual_inspection,date_ep_declaration)+180d"] }
+      ]
+    },
+    {
+      "id": "appendices",
+      "label": "Appendices / Attachments",
+      "source": "system+operator",
+      "fields": [
+        { "id": "photo_documentation", "label": "All Site Photos", "type": "Array<Photo>", "required": true, "validation": ["min_length:5", "each:gps_timestamp_caption"] },
+        { "id": "site_location_map", "label": "Site Location Map", "type": "Photo", "required": true },
+        { "id": "site_sketch", "label": "Property Sketch / Site Plan", "type": "Photo", "required": false },
+        { "id": "topographic_map", "label": "Topographic Map", "type": "Photo", "required": false },
+        { "id": "edr_report", "label": "Environmental Database Report", "type": "Array<Photo>", "required": true },
+        { "id": "historical_aerials", "label": "Historical Aerial Photographs", "type": "Array<Photo>", "required": false },
+        { "id": "foia_responses", "label": "FOIA Documents", "type": "Array<Photo>", "required": false },
+        { "id": "proposal_agreement", "label": "Client Agreement", "type": "Photo", "required": false },
+        { "id": "env_questionnaire", "label": "User Environmental Questionnaire", "type": "Photo", "required": false }
+      ]
+    }
+  ]
+}
