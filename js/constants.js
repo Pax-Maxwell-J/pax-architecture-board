@@ -7,11 +7,11 @@ const TIER_PAD_X = 50;
 const TIER_PAD_Y = 28;
 
 const COLORS = {
-  blue:   { stroke: '#2b7de9', dim: '#e8f0fc', fill: 'rgba(43,125,233,0.05)' },
-  orange: { stroke: '#e07020', dim: '#fdf0e6', fill: 'rgba(224,112,32,0.05)' },
-  green:  { stroke: '#1a9e50', dim: '#e6f7ee', fill: 'rgba(26,158,80,0.05)' },
-  purple: { stroke: '#7c3aed', dim: '#f0e8fd', fill: 'rgba(124,58,237,0.05)' },
-  gray:   { stroke: '#6b7080', dim: '#eef0f4', fill: 'rgba(107,112,128,0.05)' },
+  blue:   { stroke: '#2b7de9', dim: '#e8f0fc', fill: 'rgba(43,125,233,0.12)' },
+  orange: { stroke: '#e07020', dim: '#fdf0e6', fill: 'rgba(224,112,32,0.12)' },
+  green:  { stroke: '#1a9e50', dim: '#e6f7ee', fill: 'rgba(26,158,80,0.12)' },
+  purple: { stroke: '#7c3aed', dim: '#f0e8fd', fill: 'rgba(124,58,237,0.12)' },
+  gray:   { stroke: '#6b7080', dim: '#eef0f4', fill: 'rgba(107,112,128,0.12)' },
 };
 
 function estimateNodeHeight(node) {
