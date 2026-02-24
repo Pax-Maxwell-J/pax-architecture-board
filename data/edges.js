@@ -13,15 +13,15 @@ const edges = [
   { from: 'setup_properties',   to: 'assign_numbers' },
   { from: 'setup_properties',   to: 'integration_settings' },
   // New Tier 0 edges
-  { from: 'form_builder',       to: 'form_ingestion', label: 'import fields' },
-  { from: 'form_ingestion',     to: 'form_builder', type: 'loop', dashed: true, label: 'OCR → fields' },
+  { from: 'form_builder',       to: 'form_ingestion', label: 'import Fields' },
+  { from: 'form_ingestion',     to: 'form_builder', type: 'loop', dashed: true, label: 'OCR → Fields' },
   { from: 'form_builder',       to: 'field_configuration' },
   { from: 'form_builder',       to: 'form_markdown_guidance' },
   { from: 'create_org',         to: 'license_management' },
   { from: 'create_org',         to: 'vocabulary_aliases' },
   { from: 'create_org',         to: 'feature_toggles' },
   { from: 'field_configuration', to: 'output_configuration' },
-  { from: 'form_builder',       to: 'output_configuration', label: 'form → output map' },
+  { from: 'form_builder',       to: 'output_configuration', label: 'Schema → output map' },
 
   // ── Tier 0 → Tier 1 ──
   { from: 'create_org',         to: 'invite_team' },
@@ -41,7 +41,7 @@ const edges = [
 
   // ── Tier 1 → Tier 2 ──
   { from: 'ready_inspect',      to: 'self_start' },
-  { from: 'form_builder',       to: 'admin_assigns', label: 'form select' },
+  { from: 'form_builder',       to: 'admin_assigns', label: 'Schema select' },
 
   // ── Tier 2 internal — Triggers → Start ──
   { from: 'scheduler',          to: 'inspection_begins', dashed: true, label: 'recurring' },
@@ -50,7 +50,7 @@ const edges = [
   { from: 'external_ticket_source', to: 'admin_assigns', label: 'ticket → assign' },
   { from: 'inspection_begins',  to: 'inspection_mode_selector' },
 
-  // ── Tier 2 → Tier 3 (via mode selector) ──
+  // ── Tier 2 → Tier 3 (via CaptureMode selector) ──
   { from: 'inspection_mode_selector', to: 'calls_twilio', label: 'phone mode' },
   { from: 'inspection_mode_selector', to: 'opens_app', label: 'app mode' },
 
@@ -78,7 +78,7 @@ const edges = [
   { from: 'photo_markup_tagging', to: 'photo_analysis' },
   { from: 'session_metadata_capture', to: 'form_field_values', dashed: true, label: 'metadata' },
 
-  // ── Tier 4 internal — AI pipeline ──
+  // ── Tier 4 internal — Extraction pipeline ──
   { from: 'transcription',      to: 'ai_extraction' },
   { from: 'photo_analysis',     to: 'ocr_narration_resolver' },
   { from: 'transcription',      to: 'ocr_narration_resolver' },
@@ -139,32 +139,32 @@ const edges = [
 // ── Data Field Connections (26 total — toggled overlay) ──
 const dataConnections = [
   // Original 14
-  { from: 'create_org',         to: 'form_builder',       label: 'Organization.id → Form.orgId' },
+  { from: 'create_org',         to: 'form_builder',       label: 'Organization.id → Schema.orgId' },
   { from: 'create_org',         to: 'invite_team',        label: 'Org.id → Membership.orgId' },
-  { from: 'create_org',         to: 'setup_properties',   label: 'Org.id → Property.orgId' },
+  { from: 'create_org',         to: 'setup_properties',   label: 'Org.id → Destination.orgId' },
   { from: 'admin_signup',       to: 'invite_team',        label: 'User.id → Membership.userId' },
-  { from: 'form_builder',       to: 'form_field_values',  label: 'FormField.id → FFV.formFieldId' },
-  { from: 'inspection_begins',  to: 'form_field_values',  label: 'CallSession.id → FFV.sessionId' },
-  { from: 'create_org',         to: 'inspection_begins',  label: 'Org.id → CallSession.orgId' },
-  { from: 'form_builder',       to: 'inspection_begins',  label: 'Form.id → CallSession.formId' },
+  { from: 'form_builder',       to: 'form_field_values',  label: 'Field.id → FieldExtraction.fieldId' },
+  { from: 'inspection_begins',  to: 'form_field_values',  label: 'CaptureSession.id → FieldExtraction.sessionId' },
+  { from: 'create_org',         to: 'inspection_begins',  label: 'Org.id → CaptureSession.orgId' },
+  { from: 'form_builder',       to: 'inspection_begins',  label: 'Schema.id → CaptureSession.schemaId' },
   { from: 'admin_assigns',      to: 'inspection_begins',  label: 'Assignment.id → CS.assignmentId' },
-  { from: 'setup_properties',   to: 'admin_assigns',      label: 'Property.id → Assignment.propId' },
-  { from: 'inspection_begins',  to: 'sms_photos',         label: 'CallSession.id → Photo.sessionId' },
-  { from: 'form_field_values',  to: 'inspector_review',   label: 'FFV[] → Review display' },
+  { from: 'setup_properties',   to: 'admin_assigns',      label: 'Destination.id → Assignment.destinationId' },
+  { from: 'inspection_begins',  to: 'sms_photos',         label: 'CaptureSession.id → Photo.sessionId' },
+  { from: 'form_field_values',  to: 'inspector_review',   label: 'FieldExtraction[] → Review display' },
   { from: 'inspection_begins',  to: 'realtime_audio',     label: 'CS → TranscriptChunk.sessionId' },
-  { from: 'final_signoff',      to: 'branded_pdf',        label: 'CallSession → PDF generation' },
+  { from: 'final_signoff',      to: 'branded_pdf',        label: 'CaptureSession → PDF generation' },
 
   // 12 new data connections
   { from: 'vocabulary_aliases', to: 'field_normalization', label: 'Alias[] + VocabPackage → normalize' },
-  { from: 'form_markdown_guidance', to: 'ai_extraction',  label: 'FormGuidance.md → extraction context' },
+  { from: 'form_markdown_guidance', to: 'ai_extraction',  label: 'SchemaGuidance.md → Extraction context' },
   { from: 'output_configuration', to: 'output_template_manager', label: 'OutputConfig → template selection' },
   { from: 'output_configuration', to: 'external_system_export', label: 'OutputConfig → export target' },
-  { from: 'user_preferences',   to: 'opens_app',          label: 'UserPref → default form + mode' },
+  { from: 'user_preferences',   to: 'opens_app',          label: 'UserPref → default Schema + mode' },
   { from: 'user_preferences',   to: 'feature_toggles',    label: 'UserPref overrides OrgConfig' },
   { from: 'external_ticket_source', to: 'admin_assigns',  label: 'TicketSource → Assignment.externalId' },
-  { from: 'session_metadata_capture', to: 'form_field_values', label: 'SessionMeta → FFV context' },
+  { from: 'session_metadata_capture', to: 'form_field_values', label: 'SessionMeta → FieldExtraction context' },
   { from: 'push_notification_service', to: 'admin_assigns', label: 'PushToken → notify on assign' },
   { from: 'ai_learning_pipeline', to: 'ai_extraction',    label: 'Corrections → improved prompts' },
-  { from: 'form_builder',       to: 'field_configuration', label: 'FormField.id → FieldConfig.fieldId' },
+  { from: 'form_builder',       to: 'field_configuration', label: 'Field.id → FieldConfig.fieldId' },
   { from: 'license_management', to: 'create_org',         label: 'License.orgId → Org seats' },
 ];
