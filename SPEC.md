@@ -23,6 +23,7 @@
 5. [Infrastructure](#5-infrastructure)
 6. [Subscription & Pricing](#6-subscription--pricing)
 7. [Implementation Roadmap](#7-implementation-roadmap)
+8. [Vertical Configurations](#8-vertical-configurations)
 
 ---
 
@@ -226,6 +227,26 @@ enum NotificationEventType {
   APPROVAL_STATUS
   COMPLETION_CONFIRMED
 }
+
+enum GeoFieldMode {
+  POINT
+  POLYGON
+  TRACK
+}
+
+enum GeoExportFormat {
+  GEOJSON
+  SHAPEFILE
+  KML
+  GPX
+}
+
+enum NarrativeStatus {
+  PENDING
+  GENERATING
+  COMPLETE
+  FAILED
+}
 ```
 
 ### Org & Auth
@@ -362,6 +383,17 @@ model OrgFeatureConfig {
 
   org Organization @relation(fields: [orgId], references: [id])
 }
+
+model VerticalConfig {
+  id              String @id @default(uuid())
+  orgId           String @unique
+  verticalType    String                  // "pest_control", "telecom", "environmental", etc.
+  complianceReqs  Json?                   // vertical-specific compliance requirements
+  outputTemplates Json?                   // vertical-specific output format IDs
+  fieldPresets    Json?                   // default field configs for this vertical
+
+  org Organization @relation(fields: [orgId], references: [id])
+}
 ```
 
 ### Forms & Configuration
@@ -394,9 +426,10 @@ model FormField {
   sectionId String?
   label     String
   type      FormFieldType
-  options   Json?
-  order     Int
-  required  Boolean       @default(false)
+  options   Json?               // When type = GPS, includes geoMode: GeoFieldMode
+  order     Int                 //   POINT: single lat/lng capture
+  required  Boolean       @default(false)  //   POLYGON: draw/walk a boundary
+                                //   TRACK: record continuous path
 
   form        Form             @relation(fields: [formId], references: [id])
   config      FieldConfig?
@@ -559,13 +592,19 @@ model CallSession {
 }
 
 model Photo {
-  id            String  @id @default(uuid())
+  id            String    @id @default(uuid())
   callSessionId String
   s3Key         String
   mimeType      String
   gpsLat        Float?
   gpsLng        Float?
+  altitude      Float?
+  accuracy      Float?              // GPS accuracy in meters
+  heading       Float?              // compass direction camera faced (0-360)
+  speed         Float?              // inspector speed at capture (m/s)
   caption       String?
+  capturedAt    DateTime?           // exact capture timestamp
+  trackPointIdx Int?                // index into SessionMeta.gpsTrack for nearest point
 
   session     CallSession     @relation(fields: [callSessionId], references: [id])
   annotations PhotoAnnotation[]
@@ -599,16 +638,47 @@ model AudioRecording {
 }
 
 model SessionMeta {
-  id          String   @id @default(uuid())
-  sessionId   String   @unique
-  weather     Json?
-  deviceInfo  Json?
-  pauseCount  Int      @default(0)
-  gpsTrack    Json     @default("[]")
-  startedAt   DateTime
-  completedAt DateTime?
+  id              String    @id @default(uuid())
+  sessionId       String    @unique
+  weather         Json?
+  deviceInfo      Json?
+  pauseCount      Int       @default(0)
+  gpsTrack        Json      @default("[]")  // Array of { lat, lng, altitude?, accuracy, heading, speed, timestamp }
+  totalDistance    Float?                    // meters walked/driven
+  coveragePercent Float?                    // % of property boundary covered (if boundary defined)
+  durationSeconds Int?                      // total active session time
+  averageSpeed    Float?                    // m/s
+  startedAt       DateTime
+  completedAt     DateTime?
 
-  session CallSession @relation(fields: [sessionId], references: [id])
+  session         CallSession      @relation(fields: [sessionId], references: [id])
+  weatherSnapshot WeatherSnapshot?
+}
+
+model WeatherSnapshot {
+  id            String   @id @default(uuid())
+  sessionMetaId String   @unique
+  temperature   Float
+  conditions    String
+  humidity      Float?
+  windSpeed     Float?
+  windDirection String?
+  pressure      Float?
+  visibility    Float?
+  source        String   @default("openweathermap")
+  capturedAt    DateTime
+
+  sessionMeta SessionMeta @relation(fields: [sessionMetaId], references: [id])
+}
+
+model PropertyBoundary {
+  id         String @id @default(uuid())
+  propertyId String @unique
+  polygon    Json                    // GeoJSON Polygon coordinates
+  areaMeters Float?
+  source     String                  // "manual_draw", "parcel_api", "gps_trace"
+
+  property Property @relation(fields: [propertyId], references: [id])
 }
 
 model Schedule {
@@ -677,6 +747,31 @@ model InspectorCorrection {
   @@index([sessionId])
   @@index([fieldId])
 }
+
+model SessionNarrative {
+  id               String          @id @default(uuid())
+  callSessionId    String          @unique
+  fullNarrative    String          @db.Text    // cleaned-up prose, organized by section
+  sectionBreakdown Json                        // { sectionId: narrativeChunk }
+  wordCount        Int
+  status           NarrativeStatus @default(PENDING)
+  generatedAt      DateTime?
+
+  session CallSession @relation(fields: [callSessionId], references: [id])
+}
+
+model UnmappedNote {
+  id            String   @id @default(uuid())
+  callSessionId String
+  content       String   @db.Text
+  source        String                  // "transcript_overflow", "inspector_note", "ai_detected"
+  timestamp     DateTime?               // when in session this was captured
+  transcriptRef String?                 // pointer to transcript segment
+
+  session CallSession @relation(fields: [callSessionId], references: [id])
+
+  @@index([callSessionId])
+}
 ```
 
 ### Delivery
@@ -714,6 +809,23 @@ model ExportJob {
 
   @@index([sessionId])
   @@index([status])
+}
+
+model GeoExportJob {
+  id            String          @id @default(uuid())
+  callSessionId String?                     // single session or null for batch
+  orgId         String
+  format        GeoExportFormat
+  includePhotos Boolean         @default(true)
+  includeTrack  Boolean         @default(true)
+  s3Key         String?
+  status        ExportJobStatus @default(PENDING)
+  createdAt     DateTime        @default(now())
+
+  session CallSession? @relation(fields: [callSessionId], references: [id])
+  org     Organization @relation(fields: [orgId], references: [id])
+
+  @@index([orgId])
 }
 
 model DataFlowMap {
@@ -828,7 +940,7 @@ model NotificationEvent {
 
 > **Organization → Forms → Properties**
 >
-> Everything an admin does before the first inspection: create the org, configure billing, build forms, define properties, set up integrations. This tier has 16 features.
+> Everything an admin does before the first inspection: create the org, configure billing, build forms, define properties, set up integrations. Property boundaries and vertical configuration extend the setup pipeline. This tier has 18 features.
 
 ---
 
@@ -993,6 +1105,10 @@ Form schema feeds AI extraction prompts directly.
 - Template library for common inspection types (EPS, general, safety)
 - Forms are versioned — editing a published form creates a new version, past inspections are not affected
 - Field types: text, number, select, photo, signature, date, GPS
+- GPS field type supports three modes via `geoMode: GeoFieldMode`:
+  - **POINT**: Single lat/lng capture — tap to drop a pin (default)
+  - **POLYGON**: Draw or walk a boundary — inspector traces an area on the map or walks the perimeter with GPS recording
+  - **TRACK**: Record continuous path — Strava-style GPS track recording for the duration of a form section
 - OCR via Textract or GPT-4o vision for field detection from uploaded PDFs
 - Human-in-the-loop: never auto-publish ingested forms — admin must review and confirm
 
@@ -1165,6 +1281,7 @@ GPS coordinates sourced from Google Places API. `Property.id` used in `Assignmen
 - GPS coordinates enable map view and future routing optimization
 - Client linkage via `Person` entity (not `User`) — clients are not system users
 - Functions as lightweight CRM for client/property management
+- Property boundary polygon (PropertyBoundary) can be defined per property for coverage verification and geofencing — see `property_boundaries` (4.0.17)
 
 ---
 
@@ -1437,6 +1554,92 @@ OrgFeatureConfig { orgId, markupEnabled, captioningMode, defaultCaptureMode, sub
 - Tier-based gating — features are never hidden, always visible but locked when unavailable
 - Org defaults as baseline, user overrides for flexibility
 - Gradual rollout: enable features per-org before global release
+
+---
+
+#### 4.0.17 Property Boundaries
+
+**Status:** 0% — Vision
+
+**Description**
+
+Admin draws or imports a property boundary polygon for coverage verification, site maps, and geofencing. Sources: manual draw on map, parcel API lookup, or GPS trace from an inspector's walk.
+
+**How It Works**
+
+Admin defines a property boundary via one of three methods: (1) manual polygon drawing on a Mapbox map in the dashboard, (2) parcel API lookup that auto-populates the boundary from county/municipal parcel data, or (3) GPS trace import from an inspector's walk that converts a track to a polygon. The boundary is stored as GeoJSON and used for coverage verification, geofencing, and site map overlays.
+
+**User Experience**
+
+- Property settings → "Define Boundary" button
+- Draw polygon on satellite map (Mapbox GL JS)
+- Or: "Look up parcel" → auto-fill from parcel API
+- Or: "Import from GPS trace" → select a past inspection's track
+- Area calculated automatically and displayed
+
+**Data Flow**
+
+```
+Admin draw / parcel API / GPS trace
+→ PropertyBoundary { propertyId, polygon (GeoJSON), areaMeters, source }
+→ used by coverage_verification, geofencing, site_map_view
+```
+
+**Entities:** PropertyBoundary { propertyId, polygon, areaMeters, source }
+
+**Dependencies**
+
+- Upstream: `setup_properties`
+- Downstream: `coverage_verification`, `geofencing`, `site_map_view`
+
+**Design Decisions**
+
+- GeoJSON Polygon format for maximum interoperability
+- Parcel API integration (e.g., Regrid/Loveland) for automatic boundary population
+- Area calculated via Turf.js (client-side) or PostGIS (server-side)
+- One boundary per property — updated, not versioned
+
+---
+
+#### 4.0.18 Vertical Configuration
+
+**Status:** 0% — Vision
+
+**Description**
+
+Per-org industry/vertical selection with compliance presets. Drives default form templates, output formats, compliance requirements, and field presets. Verticals: pest_control, telecom, environmental_phase1, landscaping, construction, property_assessment, safety_osha, utility_infrastructure, general.
+
+**How It Works**
+
+During org setup (or later in settings), admin selects their industry vertical. The system applies vertical-specific defaults: recommended form templates, output format presets, compliance requirements, and field configuration presets. Vertical config stored in VerticalConfig and referenced throughout the system.
+
+**User Experience**
+
+- Org setup wizard → "Select your industry" step
+- Pre-populated defaults applied on selection
+- Can change vertical later in org settings
+- Dashboard shows vertical-relevant tips and recommendations
+
+**Data Flow**
+
+```
+Admin selects vertical → VerticalConfig { orgId, verticalType, complianceReqs, outputTemplates, fieldPresets }
+→ system applies defaults: Form templates, OutputConfig, FieldConfig presets
+```
+
+**Entities:** VerticalConfig { orgId, verticalType, complianceReqs, outputTemplates, fieldPresets }
+
+**Dependencies**
+
+- Upstream: `create_org`
+- Downstream: `form_templates`, `output_configuration`, `compliance_packs`
+
+**Design Decisions**
+
+- Vertical selection is optional — defaults to "general" if not set
+- Presets are suggestions, not restrictions — admin can always override
+- New verticals added via configuration, not code changes
+- Compliance requirements stored as JSON for flexibility
 
 ---
 
@@ -1962,7 +2165,7 @@ InspectionMode { SITE_WALK, AFTER_FACT } stored on CallSession
 
 > **Phone + App — Two Parallel Paths**
 >
-> Data enters the system through two parallel paths: a phone call to the Twilio number, or the Expo mobile app. Both paths produce the same output: transcripts, photos, and metadata that flow into AI processing. This tier has 8 features.
+> Data enters the system through two parallel paths: a phone call to the Twilio number, or the Expo mobile app. Both paths produce the same output: transcripts, photos, and metadata that flow into AI processing. GPS track recording, geofencing, session narratives, and unmapped notes capture extend the data capture pipeline. This tier has 12 features.
 
 ---
 
@@ -2104,21 +2307,24 @@ The Expo app captures voice (on-device STT), photos (with annotations and markup
 **Data Flow**
 
 ```
-Capture → Photo { localUri, gpsLat, gpsLng }
+Capture → Photo { localUri, gpsLat, gpsLng, altitude, accuracy, heading, speed, capturedAt, trackPointIdx }
         + AudioRecording { localUri, duration }
         → local SQLite → sync queue
 ```
 
+Photos include enriched GPS metadata: altitude, accuracy (meters), heading (compass direction 0–360), speed (m/s), and exact capture timestamp. Each photo is linked to the nearest GPS track point via `trackPointIdx` for route visualization.
+
 **Dependencies**
 
 - Upstream: `opens_app`
-- Downstream: `local_sync`, `photo_markup_tagging`, `session_metadata_capture`
+- Downstream: `local_sync`, `photo_markup_tagging`, `session_metadata_capture`, `gps_track_recording`
 
 **Design Decisions**
 
 - Photos captured in context, linked to form fields
-- GPS auto-tagged to each capture point
+- GPS auto-tagged to each capture point with enriched metadata (altitude, heading, accuracy, speed)
 - On-device STT via native APIs (free, instant)
+- Photo.trackPointIdx links to SessionMeta.gpsTrack for walking route map integration
 
 ---
 
@@ -2143,20 +2349,28 @@ Automatically captured for every inspection session. Weather auto-fetched from G
 **Data Flow**
 
 ```
-Auto-capture → SessionMeta { sessionId, weather, deviceInfo, pauseCount, gpsTrack[] }
-             → stored as context metadata
+Auto-capture → SessionMeta {
+  sessionId, weather, deviceInfo, pauseCount,
+  gpsTrack[]: { lat, lng, altitude?, accuracy, heading, speed, timestamp },
+  totalDistance (meters), coveragePercent, durationSeconds, averageSpeed (m/s)
+}
+→ WeatherSnapshot { temperature, conditions, humidity, windSpeed, windDirection, pressure, visibility, source }
+→ stored as context metadata
 ```
+
+`gpsTrack` element format: `{ lat: Float, lng: Float, altitude?: Float, accuracy: Float, heading: Float, speed: Float, timestamp: ISO8601 }`. Post-processing calculates `totalDistance`, `averageSpeed`, `durationSeconds`, and `coveragePercent` (if PropertyBoundary defined).
 
 **Dependencies**
 
 - Upstream: `voice_camera_gps`, `calls_twilio`
-- Downstream: `form_field_values` (metadata context)
+- Downstream: `form_field_values` (metadata context), `gps_track_recording`, `weather_correlation`, `time_analytics`
 
 **Design Decisions**
 
 - Zero inspector effort — fully automatic background capture
-- Weather API call based on GPS + timestamp
+- Weather API call based on GPS + timestamp → stored as WeatherSnapshot model
 - Metadata available for audit and dispute resolution
+- GPS track metrics (distance, coverage, duration, speed) calculated post-sync on server
 
 ---
 
@@ -2274,6 +2488,175 @@ Capture → Inspection { formId, fieldValues[] } → SQLite
 - expo-sqlite for structured data
 - Chunked uploads with resume capability — large files don't fail on flaky connections
 - Last-write-wins for simple fields (conflict resolution)
+- Offline map tile caching: pre-downloaded Mapbox tiles available during offline inspections — see `offline_map_tiles` (4.7.13)
+
+---
+
+#### 4.3.9 GPS Track Recording
+
+**Status:** 0% — Vision
+
+**Description**
+
+Strava-style continuous GPS recording during site walk mode. Records lat, lng, altitude, accuracy, heading, speed, and timestamp every 1–3 seconds. Calculates total distance, average speed, and active duration. Background recording — does not require the app in the foreground.
+
+**How It Works**
+
+When an inspection starts in SITE_WALK mode, the app begins continuous GPS recording using the device's location services in background mode. Points recorded every 1–3 seconds (adaptive based on movement speed). Track data accumulated in local SQLite and synced to SessionMeta.gpsTrack on completion.
+
+**User Experience**
+
+- Automatic: starts recording when inspection begins in SITE_WALK mode
+- Background recording — inspector can switch to camera, notes, etc.
+- Live distance counter visible in the inspection header
+- Track recording stops when inspection is completed or paused
+
+**Data Flow**
+
+```
+Device GPS → { lat, lng, altitude?, accuracy, heading, speed, timestamp }
+→ local SQLite accumulation → SessionMeta.gpsTrack[]
+→ post-processing: totalDistance, averageSpeed, durationSeconds
+```
+
+**Dependencies**
+
+- Upstream: `inspection_begins`, `voice_camera_gps`
+- Downstream: `walking_route_map`, `coverage_verification`, `site_map_view`
+
+**Design Decisions**
+
+- Background location services (iOS: significant-change + GPS, Android: foreground service)
+- Adaptive recording interval: 1s when moving, 3s when stationary (battery optimization)
+- Track stored as JSON array in SessionMeta — no separate table needed
+- Douglas-Peucker simplification applied before sync to reduce payload size
+
+---
+
+#### 4.3.10 Geofencing & Auto-Detection
+
+**Status:** 0% — Vision
+
+**Description**
+
+Auto-detect inspector arrival/departure at property GPS coordinates. Optional auto-start session on arrival, auto-pause on departure. Uses PropertyBoundary polygon if available, falls back to radius from Property.gps.
+
+**How It Works**
+
+Device monitors geofence regions for assigned properties. On entry, push notification prompts inspector to start inspection. On exit, session auto-pauses (configurable). Uses PropertyBoundary polygon for precise geofencing if available, otherwise a configurable radius (default 100m) from Property.gps coordinates.
+
+**User Experience**
+
+- Push notification: "You've arrived at [property]. Start inspection?"
+- One-tap start from notification
+- Optional auto-pause on departure (configurable per org)
+- Geofence accuracy indicator in settings
+
+**Data Flow**
+
+```
+Assignment → Property.gps / PropertyBoundary.polygon → device geofence region
+→ entry event → push notification → inspector taps → session starts
+→ exit event → auto-pause (if configured)
+```
+
+**Dependencies**
+
+- Upstream: `setup_properties`, `property_boundaries`, `push_notification_service`
+- Downstream: `gps_track_recording`
+
+**Design Decisions**
+
+- iOS: Core Location geofencing (max 20 regions monitored)
+- Android: Geofencing API (max 100 regions)
+- Fallback to radius-based when PropertyBoundary not defined
+- Auto-start disabled by default — opt-in per org
+
+---
+
+#### 4.3.11 Session Narrative Generation
+
+**Status:** 0% — Vision
+
+**Description**
+
+AI generates a cleaned-up prose summary of the entire inspection after AI processing. Organized by form section — coherent narrative, not field-by-field. Captures context and details that don't map to specific fields. Inspector can review and edit the narrative.
+
+**How It Works**
+
+After AI extraction completes, a second AI pass generates a prose narrative from the full transcript + extracted field values + photo captions. The narrative is organized by form section, creating a readable summary that preserves expert judgment and contextual details. Stored as SessionNarrative with section breakdown.
+
+**User Experience**
+
+- Auto-generated after AI extraction — no inspector action needed
+- Appears in review screen as "Inspection Narrative" section
+- Inspector can edit/refine the narrative before submission
+- Narrative included in PDF report (if output template includes it)
+
+**Data Flow**
+
+```
+Transcript + FormFieldValue[] + Photo.caption[]
+→ LLM narrative generation → SessionNarrative { fullNarrative, sectionBreakdown }
+→ inspector review → final narrative → PDF embed
+```
+
+**Entities:** SessionNarrative { callSessionId, fullNarrative, sectionBreakdown, wordCount, status }
+
+**Dependencies**
+
+- Upstream: `transcription`, `ai_extraction`
+- Downstream: `branded_pdf`, `data_archive_browser`
+
+**Design Decisions**
+
+- Separate LLM call from extraction — narrative generation is a distinct task
+- Section-organized prose — not bullet points or field lists
+- Editable by inspector — AI draft, human final authority
+- Word count tracked for template sizing
+
+---
+
+#### 4.3.12 Unmapped Notes Capture
+
+**Status:** 0% — Vision
+
+**Description**
+
+Automatically detect and preserve transcript segments that didn't map to any form field. Inspector side-comments, observations, contextual details — nothing is lost. Also captures manual freeform notes entered in the app. Surfaced in review as "Additional Observations" section.
+
+**How It Works**
+
+During AI extraction, transcript segments that don't map to any FormField are flagged and saved as UnmappedNote records. Sources include: transcript overflow (speech that doesn't match any field), inspector freeform notes (entered manually in app), and AI-detected observations (context the AI identifies as important but unmappable).
+
+**User Experience**
+
+- Automatic: transcript overflow captured without inspector action
+- Manual: "Add Note" button in app for freeform observations
+- Review screen: "Additional Observations" section shows all unmapped notes
+- Inspector can delete irrelevant notes or promote them to field values
+
+**Data Flow**
+
+```
+Transcript segments → AI extraction → unmapped segments identified
+→ UnmappedNote { content, source: "transcript_overflow", timestamp }
+Manual note → UnmappedNote { content, source: "inspector_note" }
+→ surfaced in review as "Additional Observations"
+```
+
+**Entities:** UnmappedNote { callSessionId, content, source, timestamp, transcriptRef }
+
+**Dependencies**
+
+- Upstream: `ai_extraction`, `form_field_values`
+- Downstream: `data_archive_browser`, `multimodal_search`
+
+**Design Decisions**
+
+- Nothing lost: every transcript segment either maps to a field or becomes an UnmappedNote
+- Three sources: transcript_overflow, inspector_note, ai_detected
+- TranscriptRef links back to exact transcript segment for audit trail
 
 ---
 
@@ -2362,6 +2745,8 @@ Input: { transcript, formSchema, photos, formGuidance }
 - Multi-pass: extract → validate → resolve ambiguities
 - Fallback chain: GPT-4o → Claude → manual
 - Per-form guidance documents dramatically improve extraction accuracy
+- Post-extraction steps: session narrative generation (`session_narrative`, 4.3.11) and unmapped notes detection (`unmapped_notes`, 4.3.12) run after field extraction completes
+- Transcript segments that don't map to any field are preserved as UnmappedNote records — nothing is lost
 
 ---
 
@@ -2876,7 +3261,7 @@ Approval → CallSession.status: APPROVED
 
 > **Reports · Email · Portal**
 >
-> Inspection data exits the system: branded PDF reports, email delivery, client portal access, external system exports. Multiple output formats configured per form. This tier has 8 features.
+> Inspection data exits the system: branded PDF reports, email delivery, client portal access, external system exports. Geo visualizations, GIS exports, data archive browsing, and compliance output packs extend delivery capabilities. Multiple output formats configured per form. This tier has 13 features.
 
 ---
 
@@ -2914,6 +3299,9 @@ Input: FFV[] + Photo[] + OutputTemplate → PDF engine → branded PDF → S3 �
 - PDF generation via Puppeteer or react-pdf
 - Template per form type, branded per org
 - Photos embedded inline with AI captions and annotations
+- Walking route map embedded as static map image (from Mapbox Static Images API) — see `walking_route_map` (4.6.9)
+- Photo map embed: property map with photo pins showing capture locations
+- Session narrative section: AI-generated prose summary included when available — see `session_narrative` (4.3.11)
 
 ---
 
@@ -3147,6 +3535,7 @@ CRM operations via Property/Person APIs
 - Real-time updates via WebSocket
 - Three pillars: reports, CRM, form routing
 - Analytics: completion rates, turnaround times, AI accuracy metrics
+- Extended capabilities: data archive browser (4.6.12), site map view (4.6.10), multi-modal search (4.7.8) are dashboard-integrated features
 
 ---
 
@@ -3190,11 +3579,221 @@ Webhooks: inspection.completed event
 
 ---
 
+#### 4.6.9 Walking Route Map
+
+**Status:** 0% — Vision
+
+**Description**
+
+Strava-style visualization of the inspector's GPS track overlaid on satellite/street map. Photo pins along the route showing where each photo was taken. Time-stamped breadcrumbs with speed/pace data. Embedded in PDF reports and viewable in dashboard/portal.
+
+**How It Works**
+
+SessionMeta.gpsTrack rendered as a polyline on Mapbox GL JS. Photo GPS coordinates plotted as clickable pins along the route. Timestamps shown as breadcrumb labels. Speed data visualized as color gradient on the track line (slow = blue, fast = red). Exportable as a static map image for PDF embedding.
+
+**User Experience**
+
+- Interactive map: pan, zoom, click photo pins for previews
+- Track color indicates speed/pace
+- Time labels along the route
+- Embedded as static image in PDF reports
+- Toggle satellite vs. street view
+
+**Data Flow**
+
+```
+SessionMeta.gpsTrack[] + Photo[] { gpsLat, gpsLng, capturedAt }
+→ Mapbox GL JS rendering → interactive web map
+→ static map export → PDF embed
+```
+
+**Dependencies**
+
+- Upstream: `gps_track_recording`, `branded_pdf`
+- Downstream: `site_map_view`, `data_archive_browser`
+
+**Design Decisions**
+
+- Mapbox GL JS for web, react-native-maps for mobile
+- Static map export via Mapbox Static Images API for PDF embedding
+- Track simplification (Douglas-Peucker) for performance on long inspections
+
+---
+
+#### 4.6.10 Site Map View
+
+**Status:** 0% — Vision
+
+**Description**
+
+Property-level interactive map in the dashboard showing inspection coverage area, photo locations pinned on map with thumbnails, defect/issue heatmap overlay, and historical inspection overlays for comparing visits over time.
+
+**How It Works**
+
+Dashboard page for each property aggregates GPS tracks and photo locations from all inspections. Coverage area computed from GPS track convex hull. Defect heatmap generated from FormFieldValue entries flagged as issues. Historical overlays allow toggling between inspection visits.
+
+**User Experience**
+
+- Property page → "Site Map" tab
+- Inspection coverage area (GPS track polygon) highlighted on map
+- Photo locations pinned with thumbnails — click → full photo + caption + annotations
+- Defect/issue heatmap overlay (toggle on/off)
+- Historical inspection overlays — compare visits over time
+- Click photo pin → see photo + annotations + AI caption + field values
+
+**Data Flow**
+
+```
+Property → CallSession[] → SessionMeta.gpsTrack[] + Photo[]
+→ aggregated map layers → Mapbox GL JS rendering
+→ heatmap from FormFieldValue[] (issue-flagged)
+```
+
+**Dependencies**
+
+- Upstream: `gps_track_recording`, `property_boundaries`, `dashboard`
+- Downstream: `temporal_comparison`, `digital_site_docs`
+
+**Design Decisions**
+
+- Mapbox GL JS with multiple toggleable layers
+- Heatmap intensity based on defect severity scoring
+- Historical overlays limited to last 10 inspections for performance
+
+---
+
+#### 4.6.11 GIS Export
+
+**Status:** 0% — Vision
+
+**Description**
+
+Export inspection geo data for GIS software (ArcGIS, QGIS, Google Earth). Formats: GeoJSON, Shapefile (.shp/.dbf/.prj), KML, GPX. Each photo exported as a point feature with lat/lng, caption, defect severity, form field values, and S3 URL. GPS tracks exported as LineString with timestamps. Batch export across multiple inspections for spatial analysis.
+
+**How It Works**
+
+GeoExportJob created with desired format. Lambda worker converts inspection data to requested GIS format using GDAL/ogr2ogr for Shapefile/KML conversion and native JSON for GeoJSON. Photos become Point features, GPS tracks become LineString features, property boundaries become Polygon features. Output uploaded to S3 with presigned download URL.
+
+**User Experience**
+
+- Dashboard: "Export" dropdown → select GIS format
+- Options: include photos, include track, include boundary
+- Single inspection or batch export (multiple inspections)
+- Download link emailed when ready (async for large exports)
+
+**Data Flow**
+
+```
+GeoExportJob { format, includePhotos, includeTrack }
+→ SQS → Lambda worker → GDAL/ogr2ogr conversion
+→ S3 upload → presigned URL → email notification
+```
+
+**Entities:** GeoExportJob { callSessionId?, orgId, format, includePhotos, includeTrack, s3Key, status }
+
+**Dependencies**
+
+- Upstream: `gps_track_recording`, `photo_analysis`, `external_system_export`
+- Downstream: None
+
+**Design Decisions**
+
+- GDAL/ogr2ogr in Lambda for Shapefile/KML conversion (Docker layer)
+- GeoJSON generated natively — no GDAL dependency
+- Batch exports run as background jobs with email notification on completion
+- Each photo is a GeoJSON Feature with properties: caption, severity, fieldValues, photoUrl
+
+---
+
+#### 4.6.12 Data Archive Browser
+
+**Status:** 0% — Vision
+
+**Description**
+
+Dashboard feature to browse ALL data layers per inspection. Layers: (1) Raw audio playback, (2) Raw transcript with timestamps, (3) Session narrative, (4) Normalized field values with confidence scores, (5) Unmapped notes, (6) Photos on map, (7) GPS track visualization. Side-by-side comparison of transcript segment ↔ extracted field value ↔ photo. Audio scrubbing synced to transcript highlights. Admin/manager only.
+
+**How It Works**
+
+Single-page dashboard view with tabbed/layered data panels. Audio player with waveform visualization synced to transcript highlights — clicking a transcript segment seeks the audio. Field values linked back to their source transcript segments and photos. Map panel shows GPS track + photo pins.
+
+**User Experience**
+
+- Select inspection → "Data Archive" view
+- Tabs/panels for each data layer
+- Audio scrubbing synced to transcript highlights
+- Click field value → see source transcript segment + confidence
+- Side-by-side: transcript ↔ field value ↔ photo
+- Admin/manager only (inspectors see their data in mobile app)
+
+**Data Flow**
+
+```
+CallSession → all related data layers loaded in parallel:
+  AudioRecording (S3 stream), Transcript, SessionNarrative,
+  FormFieldValue[], UnmappedNote[], Photo[], SessionMeta.gpsTrack
+→ synchronized dashboard rendering
+```
+
+**Dependencies**
+
+- Upstream: `dashboard`, `session_narrative`, `unmapped_notes`, `walking_route_map`
+- Downstream: `digital_site_docs`
+
+**Design Decisions**
+
+- Lazy-load data layers — don't fetch audio until the audio tab is opened
+- Transcript-to-audio sync via segment timestamps
+- Field-value-to-transcript linking via FormFieldValue.transcriptRef (if available)
+
+---
+
+#### 4.6.13 Compliance Output Packs
+
+**Status:** 0% — Vision
+
+**Description**
+
+Vertical-specific output templates matching regulatory formats. EPA Phase 1 ESA format, OSHA audit format, DOT inspection format, etc. Auto-maps form fields to compliance document sections. Includes required certifications, disclaimers, and regulatory references.
+
+**How It Works**
+
+Compliance packs are specialized OutputTemplate records with regulatory-specific section layouts, required fields, disclaimers, and certification blocks. The system auto-maps FormFieldValue entries to compliance document sections based on field metadata. Missing required fields are flagged before export.
+
+**User Experience**
+
+- Admin selects compliance pack when configuring form output
+- Preview shows regulatory format with mapped fields
+- Missing required fields flagged with warnings
+- Generated output includes all required certifications and disclaimers
+- Formats: EPA Phase 1 ESA, OSHA audit, DOT inspection, utility inspection
+
+**Data Flow**
+
+```
+VerticalConfig.outputTemplates → compliance OutputTemplate
+→ FormFieldValue[] auto-mapped to regulatory sections
+→ PDF generation with compliance formatting
+```
+
+**Dependencies**
+
+- Upstream: `vertical_config`, `branded_pdf`, `output_template_manager`
+- Downstream: None
+
+**Design Decisions**
+
+- Compliance packs are curated by PAX — not user-editable (regulatory accuracy)
+- Version-controlled with regulatory update tracking
+- Missing-field validation prevents incomplete compliance submissions
+
+---
+
 ### 4.7 Tier 7 — Intelligence
 
 > **Analytics & Feedback**
 >
-> The learning loop: historical data drives predictions, inspector corrections improve AI, client feedback triggers re-inspections. This tier has 5 features.
+> The learning loop: historical data drives predictions, inspector corrections improve AI, client feedback triggers re-inspections. Geo intelligence, temporal analysis, multi-modal search, and digital site documentation round out the platform. This tier has 13 features.
 
 ---
 
@@ -3387,6 +3986,327 @@ TBD — needs further design work before implementation.
 
 ---
 
+#### 4.7.6 Temporal Comparison
+
+**Status:** 0% — Vision
+
+**Description**
+
+Compare the same property across inspections over time. Side-by-side photo comparison of the same location from different visits, field value trend charts, and condition trajectory analysis (improving/stable/declining per property).
+
+**How It Works**
+
+System matches photos by GPS proximity across visits, aligns field values by field ID, and computes condition trajectories. Dashboard visualizations show trends over time with interactive drill-down.
+
+**User Experience**
+
+- Select a property → see timeline of all inspections
+- Photo diff: side-by-side photos of same location from different visits
+- Field value trends: track condition changes over time (charts)
+- Condition trajectory: improving/stable/declining per property
+
+**Data Flow**
+
+```
+Property → CallSession[] (historical) → matched by GPS proximity + field ID
+→ trend computation → dashboard visualization
+```
+
+**Dependencies**
+
+- Upstream: `dashboard`, `predictive_analytics`, `property_boundaries`
+- Downstream: `digital_site_docs`
+
+**Design Decisions**
+
+- GPS proximity matching for cross-visit photo pairing (configurable radius)
+- Trend computation runs nightly as a batch job
+- Condition trajectories use simple linear regression over field values
+
+---
+
+#### 4.7.7 Coverage Verification
+
+**Status:** 0% — Vision
+
+**Description**
+
+GPS track vs. property boundary → coverage percentage. Proves the inspector walked the entire property (or flags missed areas). Heatmap visualization of areas visited vs. not visited. Required for compliance verticals (environmental, insurance).
+
+**How It Works**
+
+PropertyBoundary polygon is compared against the GPS track LineString. PostGIS `ST_Intersection` and `ST_Area` calculate the percentage of the boundary covered by the track (with a configurable buffer). Missed areas are highlighted on the map.
+
+**User Experience**
+
+- Coverage % displayed on completed inspection card
+- Heatmap: areas visited (green) vs. not visited (red)
+- Alert if coverage falls below configurable threshold
+- Admin sets minimum coverage % per form type
+
+**Data Flow**
+
+```
+SessionMeta.gpsTrack + PropertyBoundary.polygon
+→ PostGIS spatial analysis → coveragePercent
+→ SessionMeta.coveragePercent updated
+```
+
+**Dependencies**
+
+- Upstream: `gps_track_recording`, `property_boundaries`
+- Downstream: `compliance_packs`, `time_analytics`
+
+**Design Decisions**
+
+- PostGIS for spatial computation — no client-side polygon math for accuracy
+- Configurable buffer around GPS track (default 5m) to account for GPS drift
+- Coverage threshold configurable per form type (e.g., environmental = 90%, general = 50%)
+
+---
+
+#### 4.7.8 Multi-Modal Search
+
+**Status:** 0% — Vision
+
+**Description**
+
+Search across ALL data types: transcripts, photo captions, field values, notes, and narratives. "Find all inspections mentioning 'water damage'" searches transcript + captions + fields + notes simultaneously.
+
+**How It Works**
+
+Full-text search via PostgreSQL `tsvector` indexes across Transcript.text, Photo.caption, FormFieldValue.value, UnmappedNote.content, and SessionNarrative.fullNarrative. Results ranked by relevance with source type indicators. Filter by date range, property, inspector, vertical, form type.
+
+**User Experience**
+
+- Single search bar in dashboard header
+- Results grouped by inspection with source type badges (transcript, photo, field, note)
+- Filter panel: date range, property, inspector, form type
+- Click result → jump to inspection detail with match highlighted
+
+**Data Flow**
+
+```
+Search query → PostgreSQL full-text search across 5 tables
+→ ranked results with source indicators → dashboard render
+```
+
+**Dependencies**
+
+- Upstream: `dashboard`, `form_field_values`, `session_narrative`, `unmapped_notes`
+- Downstream: None
+
+**Design Decisions**
+
+- PostgreSQL tsvector initially — migrate to Elasticsearch if scale demands it
+- Unified search index updated on inspection completion
+- Search across orgs is forbidden — always scoped by orgId
+
+---
+
+#### 4.7.9 Time & Efficiency Analytics
+
+**Status:** 0% — Vision
+
+**Description**
+
+Inspector productivity analytics: time-per-field, time-on-site, route efficiency, and aggregate trends. Non-punitive — designed for operational optimization, not surveillance.
+
+**How It Works**
+
+GPS track timestamps determine time-on-site. Field capture timestamps (from FormFieldValue.createdAt and transcript segment timestamps) calculate time-per-field. Route efficiency compares distance walked vs. property area. Aggregate trends computed nightly.
+
+**User Experience**
+
+- Dashboard widget: avg inspection time by form type
+- Drill-down: time-per-field heatmap (which fields take longest)
+- Route efficiency: distance walked vs. property size
+- Trend charts: inspection times over weeks/months
+
+**Data Flow**
+
+```
+SessionMeta { gpsTrack, durationSeconds, totalDistance }
++ FormFieldValue timestamps + PropertyBoundary.areaMeters
+→ analytics computation → InsightsMetric records
+```
+
+**Dependencies**
+
+- Upstream: `gps_track_recording`, `session_metadata_capture`, `insights_dashboard`
+- Downstream: None
+
+**Design Decisions**
+
+- Non-punitive framing: "optimization" not "surveillance"
+- Aggregate-first: team averages shown before individual metrics
+- Outlier detection flags unusually fast inspections (possible quality concern)
+
+---
+
+#### 4.7.10 Weather Correlation
+
+**Status:** 0% — Vision
+
+**Description**
+
+Auto-correlate inspection findings with weather conditions at time of inspection. Identify patterns like "90% of moisture issues found when humidity > 80%." Seasonal trend analysis with weather overlay.
+
+**How It Works**
+
+WeatherSnapshot data joined with FormFieldValue data to identify statistical correlations. Nightly batch analysis groups findings by weather conditions and identifies significant patterns. Seasonal overlays compare inspection results across weather periods.
+
+**User Experience**
+
+- Insights dashboard card: "Weather Impact Patterns"
+- Pattern alerts: "Moisture issues are 3x more likely when humidity exceeds 80%"
+- Seasonal trend chart with weather overlay
+- Helps predict when issues are most likely to be found
+
+**Data Flow**
+
+```
+WeatherSnapshot + FormFieldValue[] + RiskScore
+→ correlation analysis → pattern detection → insight cards
+```
+
+**Dependencies**
+
+- Upstream: `session_metadata_capture`, `predictive_analytics`
+- Downstream: None
+
+**Design Decisions**
+
+- Minimum sample size (50+ inspections) before surfacing correlations
+- Significance threshold to avoid spurious patterns
+- Weather data sourced from OpenWeatherMap at inspection time
+
+---
+
+#### 4.7.11 Photo Timeline & Map View
+
+**Status:** 0% — Vision
+
+**Description**
+
+Browse inspection photos chronologically AND spatially. Timeline scrub through photos in capture order with timestamps. Map view with pins on satellite imagery — click to see photo + caption + annotations.
+
+**How It Works**
+
+Photos ordered by capturedAt timestamp for timeline view. GPS coordinates (gpsLat, gpsLng) plotted on Mapbox GL JS map for spatial view. Click interaction shows photo preview with caption, annotations, and linked form fields.
+
+**User Experience**
+
+- Toggle between timeline and map view
+- Timeline: scrub through photos in capture order with timestamps
+- Map: pins on satellite view, click → photo + caption + annotations
+- Filter: by form section, defect severity, confidence level
+- Swipe between photos on mobile
+
+**Data Flow**
+
+```
+Photo[] { gpsLat, gpsLng, capturedAt, caption }
+→ timeline rendering (by capturedAt) + map rendering (by GPS)
+→ click → photo detail overlay
+```
+
+**Dependencies**
+
+- Upstream: `gps_track_recording`, `photo_analysis`, `dashboard`
+- Downstream: `digital_site_docs`
+
+**Design Decisions**
+
+- Mapbox GL JS for web, react-native-maps for mobile
+- Lazy-load photo thumbnails for map pins (S3 presigned URLs)
+- Filter state persists across timeline/map toggle
+
+---
+
+#### 4.7.12 Digital Site Documentation
+
+**Status:** 0% — Vision
+
+**Description**
+
+Living property record that grows with each inspection visit. All photos, field values, narratives, GPS tracks accumulated per property. Compare any two visits side-by-side. Export full property history as PDF or data package. Foundation for "digital twin" of physical sites.
+
+**How It Works**
+
+Property-level aggregation of all CallSession data. Timeline view shows every inspection with expandable details. Comparison mode allows selecting any two visits for side-by-side diff. Export generates a comprehensive PDF or ZIP data package with all historical data.
+
+**User Experience**
+
+- Property page → "Site Documentation" tab
+- Timeline of all inspections with photos, narratives, field values
+- Compare any two visits side-by-side
+- Export full property history as PDF or ZIP data package
+- Search within a single property's history
+
+**Data Flow**
+
+```
+Property → CallSession[] (all historical)
+→ aggregated view with all data layers per session
+→ comparison engine → side-by-side diff
+→ export engine → PDF or ZIP
+```
+
+**Dependencies**
+
+- Upstream: `temporal_comparison`, `site_map_view`, `data_archive_browser`
+- Downstream: None
+
+**Design Decisions**
+
+- Data never deleted — append-only property history
+- Export includes all raw data (photos, audio, transcripts) on request
+- Future foundation for "digital twin" capabilities
+
+---
+
+#### 4.7.13 Offline Map Tiles
+
+**Status:** 0% — Vision
+
+**Description**
+
+Cache satellite/street map tiles for areas with poor connectivity. Inspector can see property map + previous inspection data while offline. Auto-download tiles when assignment received (WiFi only).
+
+**How It Works**
+
+When an assignment is received, the app pre-downloads Mapbox map tiles for the property area (bounding box + buffer). Tiles cached in device storage. Previous inspection GPS tracks and photo locations available offline. Download only occurs on WiFi to avoid data charges.
+
+**User Experience**
+
+- Automatic: tiles download when assignment received (WiFi only)
+- Map available offline during inspection
+- Previous inspection overlay visible offline
+- Storage management: clear old tiles when space is low
+
+**Data Flow**
+
+```
+Assignment received → property GPS → bounding box calculation
+→ Mapbox Offline API → tile download (WiFi only) → device cache
+→ offline map rendering during inspection
+```
+
+**Dependencies**
+
+- Upstream: `local_sync`, `gps_track_recording`
+- Downstream: None
+
+**Design Decisions**
+
+- Mapbox Offline API for tile caching
+- WiFi-only download to avoid inspector data charges
+- Tile retention: 30 days, then auto-purge
+- Configurable: admin can disable offline maps to save device storage
+
+---
+
 ## 5. Infrastructure
 
 ### AWS Architecture
@@ -3465,6 +4385,11 @@ TBD — needs further design work before implementation.
   │  │ Deepgram │  │  AWS SES │  │  Google Places    │    │
   │  │ RT STT   │  │  Email   │  │  Address + GPS    │    │
   │  └──────────┘  └──────────┘  └───────────────────┘    │
+  │                                                        │
+  │  ┌──────────┐  ┌──────────┐  ┌───────────────────┐    │
+  │  │  Mapbox  │  │  PostGIS │  │  GDAL/ogr2ogr     │    │
+  │  │  Maps    │  │  Spatial │  │  GIS conversion   │    │
+  │  └──────────┘  └──────────┘  └───────────────────┘    │
   └────────────────────────────────────────────────────────┘
 ```
 
@@ -3476,10 +4401,13 @@ TBD — needs further design work before implementation.
 | Form System | Form, FormField, FormTemplate, FormVersion, FormGuidance, FieldConfig |
 | Inspection Entities | CallSession, FormFieldValue, Assignment, Photo, Transcript, InspectionMode (enum), TicketSource, PhotoAnnotation |
 | AWS Infrastructure | App Runner (API hosting), S3 (media/PDFs), SQS (job queues), Lambda (async workers), ECR (Docker registry), Cognito (Auth/JWT), Secrets Manager |
-| External Services | Twilio (Voice/SMS), Stripe (Billing), OpenAI/Anthropic (GPT-4o/Claude/Whisper), Deepgram (Real-time STT) |
+| External Services | Twilio (Voice/SMS), Stripe (Billing), OpenAI/Anthropic (GPT-4o/Claude/Whisper), Deepgram (Real-time STT), Mapbox (Maps/Tiles) |
 | Normalization System | Alias, VocabularyPackage, InspectorCorrection |
 | Session Metadata | SessionMeta, WeatherSnapshot |
-| Output & Export | OutputConfig, OutputTemplate, ExportJob, DataFlowMap |
+| Geo & Spatial | PropertyBoundary, GeoExportJob, PostGIS (spatial queries), GDAL/ogr2ogr (format conversion), Turf.js (client-side spatial), Mapbox GL JS (web maps), react-native-maps (mobile maps) |
+| Narrative & Notes | SessionNarrative, UnmappedNote |
+| Vertical Configuration | VerticalConfig |
+| Output & Export | OutputConfig, OutputTemplate, ExportJob, GeoExportJob, DataFlowMap |
 | Push Notifications | PushToken, NotificationEvent |
 | Licensing & Onboarding | License, OrgFeatureConfig |
 
@@ -3495,6 +4423,9 @@ TBD — needs further design work before implementation.
 | Twilio SMS/MMS | ~$0.01–0.03 | Per photo received |
 | S3 storage | ~$0.001 | Photos + audio + PDF per inspection |
 | SES email | ~$0.0001 | Per recipient |
+| Mapbox map load | ~$0.0005 | ~$0.50 per 1,000 loads (free tier: 50K/mo) |
+| PostGIS | $0 | PostgreSQL extension — no additional cost |
+| GDAL/ogr2ogr (Lambda) | ~$0.001 | Per GIS export conversion |
 | **Total estimate** | **~$0.40–0.80** | **Per inspection (phone path)** |
 
 App-only inspections skip Twilio and Deepgram costs, reducing to ~$0.15–0.45 per inspection.
@@ -3749,6 +4680,38 @@ feedback_loop → admin_assigns (re-inspection loop), push_notification_service 
 | InspectorCorrection | AI extraction improvement | Corrections train AI |
 | FormField.id | FieldConfig.fieldId | Field has advanced config |
 | License.orgId | Organization seat management | License manages seats |
+
+---
+
+---
+
+## 8. Vertical Configurations
+
+PAX is a horizontal data collection platform that adapts to specific verticals via VerticalConfig, form templates, and compliance output packs.
+
+### Supported Verticals (initial)
+
+| Vertical | Key Data | Compliance Output | GPS Importance |
+|----------|----------|-------------------|----------------|
+| Pest Control / EPS | Treatment areas, bait stations, activity levels | State regulatory reports | Medium (station locations) |
+| Telecom / Fiber Optic | Cable damage location, severity, photo evidence | Damage documentation tickets | Critical (exact damage coordinates) |
+| Environmental Phase 1 | Site conditions, contamination indicators, historical use | EPA Phase 1 ESA report format | Critical (sample locations) |
+| Landscaping QA | Plant health, irrigation, hardscape condition | Quality audit reports | High (coverage maps) |
+| Construction Progress | Phase completion, material status, safety compliance | Progress documentation, OSHA | High (site coverage) |
+| Property Assessment | Condition ratings, defects, maintenance needs | Insurance/appraisal reports | Medium (defect locations) |
+| Safety / OSHA | Hazard identification, compliance status, corrective actions | OSHA audit format | Medium |
+| Utility Infrastructure | Pole/meter/transformer condition, vegetation encroachment | Utility inspection reports | Critical (asset locations) |
+| Maintenance / Work Orders | Issue description, repair needed, parts required | Service tickets | Low-Medium |
+
+### What Makes PAX Powerful Across Verticals
+
+Expert narration + photos + GPS + metadata = contextual documentation that no form-only tool can match:
+
+- **Voice** captures nuance and expert judgment
+- **Photos** provide visual evidence with spatial context
+- **GPS** proves location, tracks coverage, enables GIS analysis
+- **AI** extracts structured data while preserving the full narrative
+- **Every layer is preserved** — raw audio → transcript → narrative → field values → notes
 
 ---
 
